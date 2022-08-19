@@ -1,4 +1,3 @@
-hello
 from pathlib import Path
 import blessed
 
