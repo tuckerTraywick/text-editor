@@ -311,6 +311,7 @@ class Editor:
         self.needsRedraw = True
         self.readingSequence = False
         self.unsavedChanges = False
+        self.readOnly = False
         self.commandInput = ""
 
     def readFromFilePath(self, filePath):
@@ -324,6 +325,7 @@ class Editor:
 
     def clearCommandBuffer(self):
         self.commandBuffer.currentLine.text = ""
+        self.commandMode = False
 
     def printToCommandBuffer(self, text):
         self.commandBuffer.insertText(text)
@@ -374,6 +376,7 @@ class Editor:
                 self.documentBuffer.insertText("    ")
                 self.needsRedraw = True
                 self.unsavedChanges = True
+            self.clearCommandBuffer()
         elif key and self.readingSequence:
             if key == "i":
                 self.documentBuffer.cursorUpLine()
@@ -434,12 +437,10 @@ class Editor:
         elif key == "\x13":  # Ctrl-S.
             self.documentBuffer.writeToFilePath(self.filePath)
             self.clearCommandBuffer()
-            self.commandMode = False
             self.unsavedChanges = False
             self.needsRedraw = True
         elif key == "\x03":  # Ctrl-C.
             self.clearCommandBuffer()
-            self.commandMode = False
             self.needsRedraw = True
         elif key == "\x02":  # Ctrl-B.
             # Print help screen.
@@ -451,7 +452,7 @@ class Editor:
             helpMessage = [
                 "Basic Commands",
                 "Ctrl-b: show keybindings",
-                "Ctrl-s: save",
+                "Ctrl-s: save file",
                 "Ctrl-q: quit",
                 "Ctrl-e: exit without saving",
                 "Ctrl-c: clear status bar",
@@ -483,6 +484,7 @@ class Editor:
             self.needsRedraw = True
         elif key and str(key).isascii() and str(key).isprintable():
             self.documentBuffer.insertText(str(key))
+            self.clearCommandBuffer()
             self.needsRedraw = True
             self.unsavedChanges = True
         elif key:
@@ -507,7 +509,9 @@ class Editor:
         else:
             if self.unsavedChanges:
                 print("[+] ", end="")
-            maxPathLength = self.terminal.width - len("[+] ...")
+            elif self.readOnly:
+                print("[RO] ", end="")
+            maxPathLength = self.terminal.width - len("[RO] ...")
             print("..." + self.filePath[len(self.filePath)-maxPathLength:] if len(self.filePath) > maxPathLength else self.filePath, end="\r")
         
         # Draw the cursor.
