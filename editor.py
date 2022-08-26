@@ -332,6 +332,19 @@ class Editor:
         self.commandMode = True
         self.commandInput = ""
 
+    def printCentered(self, lines):
+        if len(lines) == 1:
+            print(self.terminal.move_x((self.terminal.width - len(lines[0]))//2) + lines[0], end="\r\n")
+        else:
+            # Find the longest line length.
+            maxLength = 0
+            for line in lines:  
+                maxLength = max(len(line), maxLength)
+
+            print(self.terminal.move_y((self.terminal.height - len(lines))//2), end="")
+            for line in lines:
+                print(self.terminal.move_x((self.terminal.width - maxLength)//2) + line, end="\r\n")
+
     def update(self):
         key = self.terminal.inkey(0)
         if key.is_sequence:
@@ -425,6 +438,46 @@ class Editor:
             self.unsavedChanges = False
             self.needsRedraw = True
         elif key == "\x03":  # Ctrl-C.
+            self.clearCommandBuffer()
+            self.commandMode = False
+            self.needsRedraw = True
+        elif key == "\x02":  # Ctrl-B.
+            # Print help screen.
+            print(self.terminal.home + self.terminal.clear, end="")
+            print()
+            print()
+            self.printCentered(["KEYBINDINGS"])
+            self.printCentered(["(press any key to hide)"])
+            helpMessage = [
+                "Basic Commands",
+                "Ctrl-b: show keybindings",
+                "Ctrl-s: save",
+                "Ctrl-q: quit",
+                "Ctrl-e: exit without saving",
+                "Ctrl-c: clear status bar",
+                "",
+                "Navigation",
+                "Arrow keys: move cursor",
+                "Alt-j: cursor left",
+                "Alt-l: cursor right",
+                "Alt-i: cursor up",
+                "Alt-k: cursor down",
+                "Alt-s: cursor to line start",
+                "Alt-e: cursor to line end",
+                "Alt-y: cursur up half page",
+                "Alt-Y: cursor up whole page",
+                "Alt-h: cursor down half page",
+                "Alt-H: cursor down whole page",
+                "",
+                "Editing",
+                "Alt-a: insert line above",
+                "Alt-b: insert line below",
+                "Alt-d: delete character under cursor",
+                "Alt-D: delete line",
+            ]
+            self.printCentered(helpMessage)
+            self.terminal.inkey(None)
+            print(self.terminal.home + self.terminal.clear, end="")
             self.clearCommandBuffer()
             self.commandMode = False
             self.needsRedraw = True
