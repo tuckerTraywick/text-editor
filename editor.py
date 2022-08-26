@@ -8,16 +8,23 @@ class Line:
         self.previous = previous
         self.next = next
         self.text = text
+        self.length = len(text)
+
+    def setText(self, string):
+        self.text = string
+        self.length = len(string)
 
     def insertText(self, pos, string):
-        assert pos <= len(self.text)
+        assert pos <= self.length
         assert string is not None
         self.text = self.text[:pos] + string + self.text[pos:]
+        self.length += len(string)
 
     def deleteText(self, start, numberOfCharacters=1):
         assert start >= 0
-        assert start + numberOfCharacters <= len(self.text)
+        assert start + numberOfCharacters <= self.length
         self.text = self.text[:start] + self.text[start + numberOfCharacters:]
+        self.length -= numberOfCharacters
 
 
 class Buffer:
@@ -107,7 +114,20 @@ class Buffer:
         return self.currentLine is not None and self.cursorX > 0
 
     def canMoveRightCharacter(self):
-        return self.currentLine is not None and self.cursorX < len(self.currentLine.text)
+        return self.currentLine is not None and self.cursorX < self.currentLine.length
+
+    def isAtBeginning(self):
+        return self.currentLine is not None and self.cursorX == 0 and self.cursorY == 0
+
+    def isAtEnd(self):
+        return self.currentLine is not None and self.cursorY == self.numberOfLines - 1 and self.cursorX == self.currentLine.length
+
+    def currentCharacter(self):
+        assert self.currentLine is not None
+        if self.cursorX == self.currentLine.length:
+            return "\n"
+        else:
+            return self.currentLine.text[self.cursorX]
 
     def scrollUpLine(self, amount=1):
         for i in range(amount):
@@ -130,7 +150,7 @@ class Buffer:
             if self.canMoveUpLine():
                 self.currentLine = self.currentLine.previous
                 self.cursorY -= 1
-                self.cursorX = min(self.cursorX, len(self.currentLine.text))
+                self.cursorX = min(self.cursorX, self.currentLine.length)
                 if self.cursorY < self.scrollY:
                     self.scrollUpLine()
             else:
@@ -142,11 +162,11 @@ class Buffer:
             if self.canMoveDownLine():
                 self.currentLine = self.currentLine.next
                 self.cursorY += 1
-                self.cursorX = min(self.cursorX, len(self.currentLine.text))
+                self.cursorX = min(self.cursorX, self.currentLine.length)
                 if self.cursorY >= self.scrollY + self.pageHeight:
                     self.scrollDownLine()
             elif self.canMoveRightCharacter():
-                self.cursorX = len(self.currentLine.text)
+                self.cursorX = self.currentLine.length
             elif self.canScrollDownLine():
                 self.scrollDownLine()
             else:
@@ -177,10 +197,10 @@ class Buffer:
     def cursorEndLine(self, amount=1):
         for i in range(amount):
             if self.canMoveRightCharacter():
-                self.cursorX = len(self.currentLine.text)
+                self.cursorX = self.currentLine.length
             elif self.canMoveDownLine():
                 self.cursorDownLine()
-                self.cursorX = len(self.currentLine.text)
+                self.cursorX = self.currentLine.length
             elif self.canScrollDownLine():
                 self.scrollDownLine()
             else:
@@ -192,7 +212,7 @@ class Buffer:
                 self.cursorX -= 1
             elif self.canMoveUpLine():
                 self.cursorUpLine()
-                self.cursorX = len(self.currentLine.text)
+                self.cursorX = self.currentLine.length
             else:
                 break
 
@@ -206,41 +226,127 @@ class Buffer:
             else:
                 break
 
+    def cursorLeftWord(self, amount=1):
+        for i in range(amount):
+            if self.isAtBeginning():
+                break
+
+            if self.currentCharacter() not in "\n\r\t ":
+                self.cursorLeftCharacter()
+
+            while not self.isAtBeginning() and self.currentCharacter() in "\n\r\t ":
+                self.cursorLeftCharacter()
+
+            if not self.isAtBeginning() and self.currentCharacter().isalnum() or self.currentCharacter() == "_":
+                while not self.isAtBeginning() and (self.currentCharacter().isalnum() or self.currentCharacter() == "_"):
+                    self.cursorLeftCharacter()
+                self.cursorRightCharacter()
+
+    def cursorRightWord(self, amount=1):
+        for i in range(amount):
+            if self.isAtEnd():
+                break
+            
+            if self.currentCharacter().isalnum() or self.currentCharacter() == "_":
+                while not self.isAtEnd() and (self.currentCharacter().isalnum() or self.currentCharacter() == "_"):
+                    self.cursorRightCharacter()
+            else:
+                self.cursorRightCharacter()
+
+            while not self.isAtEnd() and self.currentCharacter() in "\n\r\t ":
+                self.cursorRightCharacter()
+
+    def cursorWordEnd(self, amount=1):
+        for i in range(amount):
+            if self.isAtEnd():
+                break
+            
+            while not self.isAtEnd() and self.currentCharacter() in "\n\r\t ":
+                self.cursorRightCharacter()
+
+            if self.currentCharacter().isalnum() or self.currentCharacter() == "_":
+                while not self.isAtEnd() and (self.currentCharacter().isalnum() or self.currentCharacter() == "_"):
+                    self.cursorRightCharacter()
+            else:
+                self.cursorRightCharacter()
+
+    def cursorWordEndLeft(self, amount=1):
+        for i in range(amount):
+            if self.isAtBeginning():
+                break
+            
+            if self.currentCharacter().isalnum() or self.currentCharacter() == "_":
+                while not self.isAtBeginning() and (self.currentCharacter().isalnum() or self.currentCharacter() == "_"):
+                    self.cursorLeftCharacter()
+
+            while not self.isAtBeginning() and self.currentCharacter() in "\n\r\t ":
+                self.cursorLeftCharacter()
+
+    def cursorLeftWORD(self, amount=1):
+        for i in range(amount):
+            if self.isAtBeginning():
+                break
+            
+            if self.currentCharacter() not in "\n\r\t ":
+                self.cursorLeftCharacter()
+
+            while not self.isAtBeginning() and self.currentCharacter() in "\n\r\t ":
+                self.cursorLeftCharacter()
+
+            while not self.isAtBeginning() and self.currentCharacter() not in "\n\r\t ":
+                self.cursorLeftCharacter()
+
+            if not self.isAtBeginning():
+                self.cursorRightCharacter()
+
+    def cursorRightWORD(self, amount=1):
+        for i in range(amount):
+            if self.isAtEnd():
+                break
+            
+            while not self.isAtEnd() and self.currentCharacter() not in "\n\r\t ":
+                self.cursorRightCharacter()
+
+            while not self.isAtEnd() and self.currentCharacter() in "\n\r\t ":
+                self.cursorRightCharacter()
+
     def insertText(self, text):
         assert text is not None
-        self.currentLine.text = self.currentLine.text[:self.cursorX] + text + self.currentLine.text[self.cursorX:]
+        self.currentLine.setText(self.currentLine.text[:self.cursorX] + text + self.currentLine.text[self.cursorX:])
         self.cursorX += len(text)
 
-    def insertLineAbove(self, text=""):
+    def insertLineAbove(self, amount=1, text=""):
         assert text is not None
-        newLine = Line(text, previous=self.currentLine.previous if self.currentLine is not None else None, next=self.currentLine)
-        if self.canMoveUpLine():
-            self.currentLine.previous.next = newLine
-            self.currentLine.previous = newLine
-            self.cursorUpLine()
-            self.cursorY += 1  # Correct the y position.
-        else:
-            self.firstLine = newLine
-            if self.currentLine is not None:
+        for i in range(amount):
+            newLine = Line(text, previous=self.currentLine.previous if self.currentLine is not None else None, next=self.currentLine)
+            if self.canMoveUpLine():
+                self.currentLine.previous.next = newLine
                 self.currentLine.previous = newLine
-            self.currentLine = self.topLine = newLine
-        self.numberOfLines += 1
-        self.cursorX = 0
+                self.cursorUpLine()
+                self.cursorY += 1  # Correct the y position.
+            else:
+                self.firstLine = newLine
+                if self.currentLine is not None:
+                    self.currentLine.previous = newLine
+                self.currentLine = self.topLine = newLine
+            self.numberOfLines += 1
+            self.cursorX = 0
 
-    def insertLineBelow(self, text=""):
+    def insertLineBelow(self, amount=1, text=""):
         assert text is not None
-        newLine = Line(text, previous=self.currentLine, next=self.currentLine.next if self.currentLine is not None else None)
-        if self.canMoveDownLine():
-            self.currentLine.next.previous = newLine
-            self.currentLine.next = newLine
-            self.cursorDownLine()
-        else:
-            self.lastLine = newLine
-            if self.currentLine is not None:
+        for i in range(amount):
+            newLine = Line(text, previous=self.currentLine, next=self.currentLine.next if self.currentLine is not None else None)
+            if self.canMoveDownLine():
+                self.currentLine.next.previous = newLine
                 self.currentLine.next = newLine
-            self.cursorDownLine()
-        self.numberOfLines += 1
-        self.cursorX = 0
+                self.cursorDownLine()
+            else:
+                self.lastLine = newLine
+                if self.currentLine is not None:
+                    self.currentLine.next = newLine
+                self.cursorDownLine()
+            self.numberOfLines += 1
+            self.cursorX = 0
 
     def insertLine(self, amount=1):
         for i in range(amount):
@@ -250,7 +356,7 @@ class Buffer:
                     self.cursorDownLine()
                 else:
                     text = self.currentLine.text[self.cursorX:]
-                    self.currentLine.text = self.currentLine.text[:self.cursorX]
+                    self.currentLine.setText(self.currentLine.text[:self.cursorX])
                     self.insertLineBelow(text)
             else:
                 self.currentLine = self.firstLine = self.topLine = Line()
@@ -259,7 +365,7 @@ class Buffer:
         if self.hasLine():
             for i in range(amount):
                 if self.numberOfLines == 1:
-                    self.currentLine.text = ""
+                    self.currentLine.setText("")
                     self.cursorX = 0
                     break
                 elif self.canMoveDownLine():
@@ -284,7 +390,7 @@ class Buffer:
                     self.currentLine.next.text = self.currentLine.text + self.currentLine.next.text
                     self.deleteLine()
                 elif self.currentLine.text:
-                    self.currentLine.text = self.currentLine.text[:self.cursorX]  + self.currentLine.text[self.cursorX + 1:]
+                    self.currentLine.setText(self.currentLine.text[:self.cursorX]  + self.currentLine.text[self.cursorX + 1:])
     
     def deleteCharacterLeft(self, amount=1):
         if self.hasLine():
@@ -312,7 +418,6 @@ class Editor:
         self.readingSequence = False
         self.unsavedChanges = False
         self.readOnly = False
-        self.commandInput = ""
 
     def readFromFilePath(self, filePath):
         self.filePath = filePath
@@ -324,7 +429,7 @@ class Editor:
         self.document.writeToFilePath(self.filePath)
 
     def clearCommandBuffer(self):
-        self.commandBuffer.currentLine.text = ""
+        self.commandBuffer.deleteLine()
         self.commandMode = False
 
     def printToCommandBuffer(self, text):
@@ -333,6 +438,12 @@ class Editor:
     def inputFromCommandBuffer(self):
         self.commandMode = True
         self.commandInput = ""
+
+    def repeatAmount(self):
+        if self.commandMode and self.commandBuffer.currentLine.text:
+            return int(self.commandBuffer.currentLine.text)
+        else:
+            return 1
 
     def printCentered(self, lines):
         if len(lines) == 1:
@@ -369,61 +480,108 @@ class Editor:
                 self.needsRedraw = True
                 self.unsavedChanges = True
             elif key.name == "KEY_BACKSPACE":
-                self.documentBuffer.deleteCharacterLeft()
+                if self.commandMode:
+                    self.commandBuffer.deleteCharacterLeft()
+                else:
+                    self.documentBuffer.deleteCharacterLeft()
+                    self.unsavedChanges = True
                 self.needsRedraw = True
-                self.unsavedChanges = True
             elif key.name == "KEY_TAB":
                 self.documentBuffer.insertText("    ")
                 self.needsRedraw = True
                 self.unsavedChanges = True
-            self.clearCommandBuffer()
-        elif key and self.readingSequence:
+        elif key and self.readingSequence or self.commandMode:
             if key == "i":
-                self.documentBuffer.cursorUpLine()
+                self.documentBuffer.cursorUpLine(self.repeatAmount())
                 self.needsRedraw = True
+                self.clearCommandBuffer()
             elif key == "k":
-                self.documentBuffer.cursorDownLine()
+                self.documentBuffer.cursorDownLine(self.repeatAmount())
                 self.needsRedraw = True
+                self.clearCommandBuffer()
             elif key == "j":
-                self.documentBuffer.cursorLeftCharacter()
+                self.documentBuffer.cursorLeftCharacter(self.repeatAmount())
                 self.needsRedraw = True
+                self.clearCommandBuffer()
             elif key == "l":
-                self.documentBuffer.cursorRightCharacter()
+                self.documentBuffer.cursorRightCharacter(self.repeatAmount())
                 self.needsRedraw = True
+                self.clearCommandBuffer()
+            elif key == "u":
+                self.documentBuffer.cursorLeftWord(self.repeatAmount())
+                self.needsRedraw = True
+                self.clearCommandBuffer()
+            elif key == "U":
+                self.documentBuffer.cursorLeftWORD(self.repeatAmount())
+                self.needsRedraw = True
+                self.clearCommandBuffer()
+            elif key == "o":
+                self.documentBuffer.cursorRightWord(self.repeatAmount())
+                self.needsRedraw = True
+                self.clearCommandBuffer()
+            elif key == "O":
+                self.documentBuffer.cursorRightWORD(self.repeatAmount())
+                self.needsRedraw = True
+                self.clearCommandBuffer()
+            elif key == "p":
+                self.documentBuffer.cursorWordEnd(self.repeatAmount())
+                self.needsRedraw = True
+                self.clearCommandBuffer()
+            elif key == ";":
+                self.documentBuffer.cursorWordEndLeft(self.repeatAmount())
+                self.needsRedraw = True
+                self.clearCommandBuffer()
             elif key == "y":
-                self.documentBuffer.cursorUpHalfPage()
+                self.documentBuffer.cursorUpHalfPage(self.repeatAmount())
                 self.needsRedraw = True
+                self.clearCommandBuffer()
             elif key == "Y":
-                self.documentBuffer.cursorUpPage()
+                self.documentBuffer.cursorUpPage(self.repeatAmount())
                 self.needsRedraw = True
+                self.clearCommandBuffer()
             elif key == "h":
-                self.documentBuffer.cursorDownHalfPage()
+                self.documentBuffer.cursorDownHalfPage(self.repeatAmount())
                 self.needsRedraw = True
+                self.clearCommandBuffer()
             elif key == "H":
-                self.documentBuffer.cursorDownPage()
+                self.documentBuffer.cursorDownPage(self.repeatAmount())
                 self.needsRedraw = True
+                self.clearCommandBuffer()
             elif key == "s":
-                self.documentBuffer.cursorBeginLine()
+                self.documentBuffer.cursorBeginLine(self.repeatAmount())
                 self.needsRedraw = True
+                self.clearCommandBuffer()
             elif key == "e":
-                self.documentBuffer.cursorEndLine()
+                self.documentBuffer.cursorEndLine(self.repeatAmount())
                 self.needsRedraw = True
+                self.clearCommandBuffer()
             elif key == "a":
-                self.documentBuffer.insertLineAbove()
+                self.documentBuffer.insertLineAbove(self.repeatAmount())
                 self.needsRedraw = True
                 self.unsavedChanges = True
+                self.clearCommandBuffer()
             elif key == "b":
-                self.documentBuffer.insertLineBelow()
+                self.documentBuffer.insertLineBelow(self.repeatAmount())
                 self.needsRedraw = True
                 self.unsavedChanges = True
+                self.clearCommandBuffer()
             elif key == "d":
-                self.documentBuffer.deleteCharacter()
+                self.documentBuffer.deleteCharacter(self.repeatAmount())
                 self.needsRedraw = True
                 self.unsavedChanges = True
+                self.clearCommandBuffer()
             elif key == "D":
-                self.documentBuffer.deleteLine()
+                self.documentBuffer.deleteLine(self.repeatAmount())
                 self.needsRedraw = True
                 self.unsavedChanges = True
+                self.clearCommandBuffer()
+            elif key.isdigit():
+                self.commandBuffer.insertText(key)
+                self.commandMode = True
+                self.needsRedraw = True
+            elif key == "q":
+                self.clearCommandBuffer()
+                self.needsRedraw = True
             self.readingSequence = False
         elif key == "\x11":  # Ctrl-Q.
             if self.unsavedChanges:
@@ -488,7 +646,7 @@ class Editor:
             self.needsRedraw = True
             self.unsavedChanges = True
         elif key:
-            self.commandBuffer.currentLine.text = repr(key)
+            self.commandBuffer.currentLine.setText(repr(key))
             self.needsRedraw = True
 
     def draw(self):
@@ -504,7 +662,7 @@ class Editor:
                 print("~", end="\r\n")
         
         # Draw the command bar.
-        if self.commandBuffer.hasLine() and self.commandBuffer.currentLine.text:
+        if self.commandBuffer.hasLine() and self.commandBuffer.currentLine.text or self.commandMode:
             print(self.commandBuffer.currentLine.text, end="\r")
         else:
             if self.unsavedChanges:
@@ -516,7 +674,7 @@ class Editor:
         
         # Draw the cursor.
         if self.commandMode:
-            print(self.terminal.move_xy(self.commandBuffer.cursorX, self.terminal.height))
+            print(self.terminal.move_xy(self.commandBuffer.cursorX, self.terminal.height), end="")
             print(self.terminal.reverse(self.commandBuffer.currentLine.text[self.commandBuffer.cursorX] \
                 if self.commandBuffer.cursorX < len(self.commandBuffer.currentLine.text) else " "), end="\r")
         else:
