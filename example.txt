@@ -1,8 +1,7 @@
-hello world
-one
-two
-three
-four five
-six seven eight sixteen
-seventeen eightteen nineteen
-abc 123 456
+#include <stdio>
+
+int main(void) {
+    println("hello\n");
+    return 0;
+}
+

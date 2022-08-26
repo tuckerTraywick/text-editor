@@ -1,5 +1,6 @@
+import os
+import sys
 import blessed
-from pathlib import Path
 
 
 class Line:
@@ -35,18 +36,25 @@ class Buffer:
         self.topLine = None
         self.scrollY, self.scrollX = 0, 0
         self.cursorY, self.cursorX = 0, 0
+        self.tabWidth = 4
 
     def readFromFilePath(self, filePath):
         assert filePath is not None
-        file = open(filePath, "r")
-        assert file.readable()
-        self.readFromFile(file)
-        file.close()
+        if os.path.exists(filePath):
+            file = open(filePath, "r")
+            assert file.readable()
+            self.readFromFile(file)
+            file.close()
+            return True
+        else:
+            self.insertLineAbove()
+            self.scrollX = self.scrollY = self.cursorX = self.cursorY = 0
+            return False
 
     def writeToFilePath(self, filePath):
         assert filePath is not None
-        file = open(filePath, "w")
-        assert file.writeable()
+        file = open(filePath, "w+")
+        assert file.writable()
         self.writeToFile(file)
         file.close()
 
@@ -58,13 +66,15 @@ class Buffer:
         self.firstLine = self.lastLine = self.currentLine = None
         for line in file.readlines():
             # If this is not the first line, append it to the last line.
-            if self.firstLine:
+            if self.firstLine is not None:
                 self.lastLine.next = Line(text=line[:-1], previous=self.lastLine)
                 self.lastLine = self.lastLine.next
             # If this is the first line, make the last and current line point to it.
             else:
                 self.firstLine = self.lastLine = self.currentLine = self.topLine = Line(text=line[:-1])
             self.numberOfLines += 1
+        if self.firstLine is None:
+            self.insertLineAbove()
 
     def writeToFile(self, file):
         assert file is not None
@@ -72,10 +82,10 @@ class Buffer:
         # Make sure we are at the beginning of the file and that it is empty.
         file.seek(0)
         file.truncate()
-        if self.lines:
+        if self.firstLine is not None:
             currentLine = self.firstLine
-            while currentLine:
-                file.write(currentLine.text + "" if currentLine.next is None else "\n")
+            while currentLine is not None:
+                file.write(currentLine.text + "\n")
                 currentLine = currentLine.next
 
     def hasLine(self):
@@ -145,8 +155,14 @@ class Buffer:
     def cursorUpHalfPage(self, amount=1):
         self.cursorUpLine(amount*self.pageHeight//2)
 
+    def cursorUpPage(self, amount=1):
+        self.cursorUpLine(amount*self.pageHeight)
+
     def cursorDownHalfPage(self, amount=1):
         self.cursorDownLine(amount*self.pageHeight//2)
+
+    def cursorDownPage(self, amount=1):
+        self.cursorDownLine(amount*self.pageHeight)
 
     def cursorBeginLine(self, amount=1):
         for i in range(amount):
@@ -193,7 +209,7 @@ class Buffer:
     def insertText(self, text):
         assert text is not None
         self.currentLine.text = self.currentLine.text[:self.cursorX] + text + self.currentLine.text[self.cursorX:]
-        self.cursorX += 1
+        self.cursorX += len(text)
 
     def insertLineAbove(self, text=""):
         assert text is not None
@@ -289,19 +305,32 @@ class Editor:
         self.filePath = None
         self.documentBuffer = Buffer(self.terminal.width - 5, self.terminal.height - 1)
         self.commandBuffer = Buffer(self.terminal.width - 5, 1)
-        #self.commandBuffer.insertLine()
+        self.commandBuffer.insertLineAbove()
         self.commandMode = False  # True = focused on command bar, False = focused on document.
         self.keepRunning = True
         self.needsRedraw = True
         self.readingSequence = False
+        self.unsavedChanges = False
+        self.commandInput = ""
 
     def readFromFilePath(self, filePath):
         self.filePath = filePath
-        self.documentBuffer.readFromFilePath(self.filePath)
+        if not self.documentBuffer.readFromFilePath(self.filePath):
+            self.unsavedChanges = True
 
     def writeToFile(self):
         assert self.filePath
         self.document.writeToFilePath(self.filePath)
+
+    def clearCommandBuffer(self):
+        self.commandBuffer.currentLine.text = ""
+
+    def printToCommandBuffer(self, text):
+        self.commandBuffer.insertText(text)
+
+    def inputFromCommandBuffer(self):
+        self.commandMode = True
+        self.commandInput = ""
 
     def update(self):
         key = self.terminal.inkey(0)
@@ -323,9 +352,15 @@ class Editor:
             elif key.name == "KEY_ENTER":
                 self.documentBuffer.insertLine()
                 self.needsRedraw = True
+                self.unsavedChanges = True
             elif key.name == "KEY_BACKSPACE":
                 self.documentBuffer.deleteCharacterLeft()
                 self.needsRedraw = True
+                self.unsavedChanges = True
+            elif key.name == "KEY_TAB":
+                self.documentBuffer.insertText("    ")
+                self.needsRedraw = True
+                self.unsavedChanges = True
         elif key and self.readingSequence:
             if key == "i":
                 self.documentBuffer.cursorUpLine()
@@ -342,8 +377,14 @@ class Editor:
             elif key == "y":
                 self.documentBuffer.cursorUpHalfPage()
                 self.needsRedraw = True
+            elif key == "Y":
+                self.documentBuffer.cursorUpPage()
+                self.needsRedraw = True
             elif key == "h":
                 self.documentBuffer.cursorDownHalfPage()
+                self.needsRedraw = True
+            elif key == "H":
+                self.documentBuffer.cursorDownPage()
                 self.needsRedraw = True
             elif key == "s":
                 self.documentBuffer.cursorBeginLine()
@@ -354,24 +395,50 @@ class Editor:
             elif key == "a":
                 self.documentBuffer.insertLineAbove()
                 self.needsRedraw = True
+                self.unsavedChanges = True
             elif key == "b":
                 self.documentBuffer.insertLineBelow()
                 self.needsRedraw = True
+                self.unsavedChanges = True
             elif key == "d":
                 self.documentBuffer.deleteCharacter()
                 self.needsRedraw = True
+                self.unsavedChanges = True
             elif key == "D":
                 self.documentBuffer.deleteLine()
                 self.needsRedraw = True
+                self.unsavedChanges = True
             self.readingSequence = False
-        elif key == "\x11":
+        elif key == "\x11":  # Ctrl-Q.
+            if self.unsavedChanges:
+                self.clearCommandBuffer()
+                self.printToCommandBuffer("File has unsaved changes. Press Ctrl-E to exit without saving.")
+                self.needsRedraw = True
+            else:
+                self.keepRunning = False
+        elif key == "\x05":  # Ctrl-E.
             self.keepRunning = False
+        elif key == "\x13":  # Ctrl-S.
+            self.documentBuffer.writeToFilePath(self.filePath)
+            self.clearCommandBuffer()
+            self.commandMode = False
+            self.unsavedChanges = False
+            self.needsRedraw = True
+        elif key == "\x03":  # Ctrl-C.
+            self.clearCommandBuffer()
+            self.commandMode = False
+            self.needsRedraw = True
         elif key and str(key).isascii() and str(key).isprintable():
             self.documentBuffer.insertText(str(key))
+            self.needsRedraw = True
+            self.unsavedChanges = True
+        elif key:
+            self.commandBuffer.currentLine.text = repr(key)
             self.needsRedraw = True
 
     def draw(self):
         print(self.terminal.home + self.terminal.clear, end="")
+        # Draw the document.
         currentLine = self.documentBuffer.topLine
         for i in range(self.terminal.height - 1):
             if currentLine is not None:
@@ -381,15 +448,33 @@ class Editor:
             else:
                 print("~", end="\r\n")
         
-        print(self.filePath, end="\r")
-        print(self.terminal.move_xy(self.documentBuffer.cursorX - self.documentBuffer.scrollX + 5, self.documentBuffer.cursorY - self.documentBuffer.scrollY), end="")
-        print(self.terminal.reverse(self.documentBuffer.currentLine.text[self.documentBuffer.cursorX] \
-            if self.documentBuffer.cursorX < len(self.documentBuffer.currentLine.text) else " "), end="\r")
+        # Draw the command bar.
+        if self.commandBuffer.hasLine() and self.commandBuffer.currentLine.text:
+            print(self.commandBuffer.currentLine.text, end="\r")
+        else:
+            if self.unsavedChanges:
+                print("[+] ", end="")
+            maxPathLength = self.terminal.width - len("[+] ...")
+            print("..." + self.filePath[len(self.filePath)-maxPathLength:] if len(self.filePath) > maxPathLength else self.filePath, end="\r")
+        
+        # Draw the cursor.
+        if self.commandMode:
+            print(self.terminal.move_xy(self.commandBuffer.cursorX, self.terminal.height))
+            print(self.terminal.reverse(self.commandBuffer.currentLine.text[self.commandBuffer.cursorX] \
+                if self.commandBuffer.cursorX < len(self.commandBuffer.currentLine.text) else " "), end="\r")
+        else:
+            print(self.terminal.move_xy(self.documentBuffer.cursorX - self.documentBuffer.scrollX + 5, self.documentBuffer.cursorY - self.documentBuffer.scrollY), end="")
+            print(self.terminal.reverse(self.documentBuffer.currentLine.text[self.documentBuffer.cursorX] \
+                if self.documentBuffer.cursorX < len(self.documentBuffer.currentLine.text) else " "), end="\r")
 
-    def run(self):
+    def run(self, filePath=None):
         self.setup()
         with self.terminal.raw(), self.terminal.keypad(), self.terminal.hidden_cursor():
-            self.readFromFilePath(str(Path.home()) + "/Documents/code/text-editor/example.txt")
+            if filePath is None:
+                self.readFromFilePath("untitled.txt")
+            else:
+                self.readFromFilePath(filePath)
+
             while self.keepRunning:
                 if self.needsRedraw:
                     self.draw()
@@ -400,4 +485,4 @@ class Editor:
 
 if __name__ == "__main__":
     editor = Editor()
-    editor.run()
+    editor.run(sys.argv[1] if len(sys.argv) > 1 else None)
