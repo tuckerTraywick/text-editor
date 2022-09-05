@@ -1,0 +1,164 @@
+Alt l
+Alt L
+Ctrl s
+Alt a b c
+Alt a b Ctrl c d
+Alt a Number b
+Alt a Number Enter Number Enter
+Number Enter
+Number Alt a
+Number Any
+Number Motion
+Number Edit
+
+
+
+
+# special keys:
+Ctrl
+Alt
+Fn
+Escape
+Enter
+Backspace
+Insert
+Delete
+Tab
+CapsLock
+PageUp
+PageDown
+PrintScreen
+F1 - 12
+Up
+Down
+Left
+Right
+
+# special bindings:
+Unbound
+Any
+Printable
+Letter
+Capital
+Lowercase
+Digit
+Number
+Motion
+Edit
+
+# modes:
+all
+insert
+command
+number
+jump
+
+# tags:
+any
+other
+edit
+motion
+command
+
+
+
+
+
+# config folder:
+.config/text-editor/
+    __init__.py
+    config.py
+    colorschemes/
+        __init__.py
+        default.py
+        monokai.py
+    languages/
+        __init__.py
+        python.py
+        c.py
+    myextension/
+        __init__.py
+        config.py
+        colorschemes/
+            __init__.py
+            sepcialscheme.py
+
+
+# .config/text-editor/__init__.py
+editor.enableExtension("./myextension/**")
+editor.enableExtension("./colorschemes/monokai.py")
+
+
+# .config/text-editor/config.py:
+editor.addBinding("insert", "edit", "Enter", editor.insertLine)
+editor.addBinding("insert", "edit", "Backspace", editor.deleteCharacterLeft)
+editor.addBinding("insert", "motion", "Alt i", editor.cursorUpLine)
+editor.addBinding("insert", "motion", "Alt k", editor.cursorDownLine)
+editor.addBinding("insert", "command", "Ctrl s", editor.save)
+editor.addBinding("insert", "edit", "UnboundPrintable", editor.insertCharacter)
+editor.addBinding("insert", "other", "Alt Digit", editor.beginNumber)
+....
+
+editor.setSetting("showLineNumbers", True)
+editor.setSetting("relativeLineNumbers", False)
+editor.setSetting("syntaxHighLighting", True)
+editor.setSetting("softTabs", False)
+editor.setSetting("softTabWidth", 4)
+editor.setSetting("visualTabWidth", 4)
+editor.setSetting("colorScheme", "default")
+
+
+
+
+Editor
+    bindings
+    settings
+    colorschemes
+    mode
+    workingDirectory
+    buffers
+    currentBuffer
+    scratchBuffer
+    commandBuffer
+    terminal
+    keepRunning
+    needsRedraw
+    unsavedChanges
+    readOnly
+    gutterWidth
+
+Buffer
+    filePath
+    isReadOnly
+    pageWidth
+    pageHeight
+    visualTabWidth
+    softTabWidth
+    numberOfLines
+    firstLine
+    lastLine
+    currentLine
+    topLine
+    scrollX, scrollY
+    cursorX, cursorY
+    maxCursorX
+
+    open() -> working directory
+    close()
+    write()
+
+
+
+
+
+bindings = {
+    "insert": {
+        "Alt": {
+            "i": editor.cursorUpLine,
+            "Digit": editor.beginNumber,
+        },
+    },
+}
+
+
+
