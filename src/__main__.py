@@ -6,7 +6,7 @@ from editor import Editor
 if __name__ == "__main__":
     editor = Editor()
     
-    editor.addKeybinding(["insert"], "Ctrl a b c", editor.cursorCharacterLeft)
+    editor.addKeybinding(["insert"], "Alt ' r", editor.cursorCharacterRight)
 
     editor.addKeybinding(["insert"], "Ctrl q", editor.quit)
     editor.addKeybinding(["insert"], "Ctrl e", editor.exit)
