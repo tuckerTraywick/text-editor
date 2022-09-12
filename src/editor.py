@@ -4,47 +4,100 @@ from buffer import Buffer
 
 def untitledFileName(directory):
     # TODO: Make this append a number to the end of the file name if one already exists.
-    return "example.txt"
+    return "untitled.txt"
 
 
 class Editor:
     def __init__(self):
-        self.keybindings = {
-            "insert": {},
-            "command": {},
-            "number": {},
-            "switchBuffer": {},
-            "openFile": {},
-        }
+        self.terminal = blessed.Terminal()
         self.settings = {
-            "defaultMode": "insert",
             "visualTabWidth": 4,
             "softTabWidth": 4,
+            "minimumGutterWidth": 2,
+            "maximumListSize": 5,
+            "emptyLineFill": "~",
             "softTabs": False,
             "showLineNumbers": True,
             "relativeLineNumbers": False,
-            "minimumGutterWidth": 2,
-            "emptyLineFill": "~",
-            "colorscheme": "monochrome",
+            "showStatusLine": True,
+            "highlighting": False,
         }
-        self.colorschemes = {}
-        self.mode = self.settings["defaultMode"]
-        self.currentBindings = self.keybindings[self.mode]
-        self.workingDirectory = None
+        self.colorscheme = {
+            "default": self.terminal.normal,
+            "lineNumber": self.terminal.normal,
+            "currentLineNumber": self.terminal.bright,
+            "currentSelection": self.terminal.reverse,
+            "emptyLineFill": self.terminal.normal,
+            "statusLine": self.terminal.reverse,
+            "prompt": self.terminal.bold,
+            "input": self.terminal.normal,
+            "activeCursor": self.terminal.reverse,
+            "inactiveCursor": self.terminal.reverse_underline_italic,
+        }
+        self.keybindings = {
+            "edit": {},
+            "search": {},
+            "replace": {},
+            "findBuffer": {},
+            "findFile": {},
+        }
+        self.setup()
+
+    def setup(self):
+        self.mode = "edit"
+        self.workingDirectory = ""
+        self.currentKeybindings = self.keybindings[self.mode]
+        self.currentKeySequence = ""
+        self.statusLine = ""
+        self.scratchBuffer = Buffer(self.terminal.width, self.bufferHeight, self.settings.get("visualTabwidth", 4), self.settings.get("softTabWidth", 4), index=-1, name="*scratch*")
+        self.clipboardBuffer = Buffer(self.terminal.width, self.bufferHeight, self.settings.get("visualTabWidth", 4), self.settings.get("softTabWidth", 4), index=-1, name="*clipboard*")
+        self.promptBuffer = Buffer(self.terminal.width, 1, self.settings.get("visualTabWidth", 4), self.settings.get("softTabWidth", 4), index=-1, name="*prompt*")
+        self.listBuffer = Buffer(self.terminal.width, 1, self.settings.get("visualTabWidth", 4), self.settings.get("softTabWidth", 4), index=-1, name="*list*")
         self.buffers = []
         self.currentBufferIndex = 0
         self.previousBufferIndex = 0
-        self.registers = []
-        self.terminal = blessed.Terminal()
         self.keepRunning = True
         self.needsRedraw = True
-        self.clearCommandBuffer = False
-        self.gutterWidth = self.settings["minimumGutterWidth"]
-        self.pageWidth = self.terminal.width - self.gutterWidth
-        self.pageHeight = self.terminal.height - 1
-        self.commandBuffer = Buffer(self.pageWidth, self.pageHeight, self.settings["visualTabWidth"], self.settings["softTabWidth"])
-        self.scratchBuffer = Buffer(self.pageWidth, self.pageHeight, self.settings["visualTabWidth"], self.settings["softTabWidth"])
-        self.commandInProgress = ""
+        self.resetStatusLine = True
+
+    @property
+    def currentBuffer(self):
+        return self.buffers[self.currentBufferIndex]
+
+    @property
+    def previousBuffer(self):
+        return self.buffers[self.previousBufferIndex]
+
+    @property
+    def bufferHeight(self):
+        height = self.terminal.height - 1 if self.getSetting("showStatusLine") or self.statusLine else self.terminal.height
+        if self.mode in ["findBuffer", "findFile"]:
+            height -= self.promptBuffer.numberOfLines + self.listBuffer.pageHeight
+        return height
+
+    def getSetting(self, *settings):
+        if len(settings) == 1:
+            return self.settings[settings[0]]
+        else:
+            return {s: self.settings[s] for s in self.settings if s in self.settings}
+
+    def setSetting(self, setting, value):
+        self.settings[setting] = value
+
+    def setSettings(self, settings):
+        self.settings.update(settings)
+
+    def getColor(self, *colors):
+        if len(colors) == 1:
+            return self.colorscheme[colors[0]]
+        else:
+            return {c: self.colorscheme[c] for c in self.colorscheme if c in self.colorscheme}
+
+    def setColor(self, textType, color):
+        self.colorscheme[textType] = color
+
+    def setColors(self, colors):
+        self.colorscheme.update(colors)
 
     def addKeybinding(self, modes, sequence, action):
         if isinstance(modes, list):
@@ -52,14 +105,14 @@ class Editor:
                 self.addKeybinding(mode, sequence, action)
             return
 
+
         mode = modes
         if mode[0] == "!":
             for key in self.keybindings:
                 if key != mode[1:]:
                     self.addKeybinding(key, sequence, action)
             return
-
-        if mode == "all":
+        elif mode == "all":
             for key in self.keybindings:
                 self.addKeybinding(key, sequence, action)
             return
@@ -81,49 +134,27 @@ class Editor:
             currentBinding = currentBinding[key]
         previousBinding[key] = action
 
-    def currentBuffer(self):
-        if self.buffers:
-            return self.buffers[self.currentBufferIndex]
-        else:
-            return None
-
-    def bufferName(self, bufferIndex):
-        buffer = self.buffers[bufferIndex]
-        name = str(bufferIndex) + " "
-        name += "[ro] " if buffer.isReadOnly else "[+] " if buffer.hasUnsavedChanges else ""
-        path = buffer.filePath
-        if len(path) + len(name) > self.pageWidth:
-            return name + "..." + path[self.pageWidth - len(path) - len("..."):]
-        return name + path
-
-    def newBuffer(self):
-        self.buffers.insert(self.currentBufferIndex, Buffer(self.pageWidth, self.pageHeight, self.settings["visualTabWidth"], 
-            self.settings["softTabWidth"]))
-        self.currentBuffer().open(untitledFileName(self.workingDirectory))
-        if len(self.buffers) > 1:
-            self.previousBufferIndex += 1
-        self.mode = self.settings["defaultMode"]
+    def newBuffer(self, name="untitled"):
+        self.previousBufferIndex = self.currentBufferIndex
+        self.currentBufferIndex = len(self.buffers)
+        self.buffers.append(Buffer(self.terminal.width, self.bufferHeight, self.settings["visualTabWidth"], 
+            self.settings["softTabWidth"], self.currentBufferIndex, name))
+        self.mode = "edit"
         self.needsRedraw = True
 
     def openInPlace(self, filePath):
         if self.buffers:
-            self.currentBuffer().open(filePath)
+            self.currentBuffer.open(filePath)
         else:
             self.newBuffer()
-            self.currentBuffer().open(filePath)
+            self.currentBuffer.open(filePath)
+        self.currentBuffer.name = filePath
         self.needsRedraw = True
 
-    def open(self, filePaths):
-        if isinstance(filePaths, list):
-            for path in filePaths:
-                self.open(path)
-        else:
-            for buffer in self.buffers:
-                if buffer.filePath == filePaths:
-                    return
+    def open(self, *filePaths):
+        for path in filePaths:
             self.newBuffer()
-            self.openInPlace(filePaths)
-        self.needsRedraw = True
+            self.openInPlace(path)
 
     def switchToBuffer(self, bufferIndex):
         if bufferIndex != self.currentBufferIndex:
@@ -131,7 +162,7 @@ class Editor:
             self.currentBufferIndex = bufferIndex
             self.needsRedraw = True
 
-    def switchToPreviousBuffer(self):
+    def switchToPreviousBuffer(self, key=None):
         if self.currentBufferIndex != self.previousBufferIndex:
             self.currentBufferIndex = self.previousBufferIndex
             self.needsRedraw = True
@@ -140,73 +171,30 @@ class Editor:
         if self.currentBufferIndex < len(self.buffers) - 1:
             self.currentBufferIndex += 1
             self.needsRedraw = True
+            if self.mode == "findBuffer":
+                self.listBuffer.cursorLineDown()
 
     def bufferBackward(self, key=None):
         if self.currentBufferIndex > 0:
             self.currentBufferIndex -= 1
             self.needsRedraw = True
-
-    def commandBufferPrompt(self, prompt, mode=None):
-        def process(key=None):
-            self.commandBuffer.close()
-            self.commandBuffer.insert(prompt)
-            if mode is not None:
-                self.mode = mode
-            else:
-                self.mode = "command"
-            self.needsRedraw = True
-        return process
-
-    def commandBufferInsert(self, key):
-        self.commandBuffer.insert(key)
-        self.needsRedraw = True
-
-    def commandBufferDelete(self, limit=0):
-        def process(key=None):
-            if not (self.commandBuffer.cursorAtEnd() and self.commandBuffer.cursorX >= limit):
-                self.commandBuffer.delete()
-                self.needsRedraw = True
-        return process
-
-    def commandBufferDeleteLeft(self, limit=0):
-        def process(key=None):
-            if not (self.commandBuffer.cursorAtEnd() and self.commandBuffer.cursorX >= limit):
-                self.commandBuffer.deleteCharacterLeft()
-                self.needsRedraw = True
-        return process
-
-    def commandBufferCursorLeft(self, limit=0):
-        def process(key=None):
-            if self.commandBuffer.cursorX > limit:
-                self.commandBuffer.cursorCharacterLeft()
-                self.needsRedraw = True
-        return process
-    
-    def commandBufferCursorRight(self, key=None):
-        self.commandBuffer.cursorCharacterRight()
-        self.needsRedraw = True
-
-    def openFileFromCommandBuffer(self, start=0):
-        def process(key=None):
-            self.open(self.commandBuffer.currentLine.text[start:])
-            self.mode = self.settings["defaultMode"]
-            self.needsRedraw = True
-        return process
+            if self.mode == "findBuffer":
+                self.listBuffer.cursorLineUp()
 
     def cursorCharacterRight(self, key=None):
-        self.currentBuffer().cursorCharacterRight()
+        self.currentBuffer.cursorCharacterRight()
         self.needsRedraw = True
 
     def cursorCharacterLeft(self, key=None):
-        self.currentBuffer().cursorCharacterLeft()
+        self.currentBuffer.cursorCharacterLeft()
         self.needsRedraw = True
 
     def cursorLineUp(self, key=None):
-        self.currentBuffer().cursorLineUp()
+        self.currentBuffer.cursorLineUp()
         self.needsRedraw = True
 
     def cursorLineDown(self, key=None):
-        self.currentBuffer().cursorLineDown()
+        self.currentBuffer.cursorLineDown()
         self.needsRedraw = True
 
     def insertLineAbove(self, key=None):
@@ -215,30 +203,29 @@ class Editor:
 
     def insertCharacter(self, key):
         if key == "Space":
-            self.currentBuffer().insert(1, " ")
+            self.currentBuffer.insert(1, " ")
         else:
-            self.currentBuffer().insert(1, key)
+            self.currentBuffer.insert(1, key)
         self.needsRedraw = True
 
     def delete(self, key=None):
-        self.currentBuffer().delete()
+        self.currentBuffer.delete()
         self.needsRedraw = True
 
     def deleteLeft(self, key=None):
-        self.currentBuffer().deleteLeft()
+        self.currentBuffer.deleteLeft()
         self.needsRedraw = True
 
     def deleteLine(self, key=None):
-        self.currentBuffer().deleteLine()
+        self.currentBuffer.deleteLine()
         self.needsRedraw = True
-    
+
     def quit(self, key=None):
         for i, buffer in enumerate(self.buffers):
             if buffer.hasUnsavedChanges:
-                self.commandBuffer.close()
-                self.commandBuffer.insert("A file has unsaved changes. Press Ctrl e to exit without saving.")
+                self.statusLine = "A file has unsaved changes. Press Ctrl e to exit without saving."
                 self.needsRedraw = True
-                self.clearCommandBuffer = True
+                self.clearStatusLine = True
                 return
         self.keepRunning = False
         
@@ -248,69 +235,90 @@ class Editor:
     def setMode(self, mode):
         def process(key):
             self.mode = mode
-            self.commandBuffer.close()
             self.needsRedraw = True
+
+            if mode == "findBuffer":
+                self.promptBuffer.clear()
+                self.listBuffer.clear()
+                self.listBuffer.pageHeight = min(len(self.buffers), self.getSetting("maximumListSize"))
+                for i, buffer in enumerate(self.buffers[::-1]):
+                    self.listBuffer.insert(1, f"{buffer.fullName}")
+                    if i < len(self.buffers) - 1:
+                        self.listBuffer.insertLineAbove()
+                self.listBuffer.cursorLineDown(self.currentBufferIndex)
         return process
 
-    def draw(self):
-        print(self.terminal.home + self.terminal.clear, end="")
-        
-        # Draw the current buffer.
-        currentLine = self.currentBuffer().topLine
-        self.gutterWidth = max(len(str(self.currentBuffer().numberOfLines)), self.settings["minimumGutterWidth"])
-        for i in range(self.terminal.height - 1):
-            if currentLine is not None:
-                text = currentLine.text[self.currentBuffer().scrollX:]
-                if self.settings["showLineNumbers"]:
-                    print(f"{self.currentBuffer().scrollY + i + 1:>{self.gutterWidth}} ", end="")
-                print(f"{text}", end="\r\n")
+    def print(self, color, text, end="\r\n"):
+        colorCode = self.colorscheme[color]
+        if isinstance(colorCode, str):
+            print(colorCode + text, end=end)
+        else:
+            print(colorCode(text), end=end)
+        print(self.terminal.normal, end="")
+
+    def drawBuffer(self, buffer, height, active, isList=False):
+        # Draw the buffer.
+        currentLine = buffer.topLine
+        for i in range(height):
+            if buffer.scrollY + i < buffer.numberOfLines:
+                if self.getSetting("showLineNumbers"):
+                    if self.getSetting("relativeLineNumbers") and not isList:
+                        lineNumber = buffer.cursorY + 1 if i + buffer.scrollY == buffer.cursorY else abs(buffer.cursorY - buffer.scrollY - i)
+                    else:
+                        lineNumber = buffer.scrollY + i + 1
+                    lineNumberText = f"{lineNumber:>{max(self.getSetting('minimumGutterWidth'), len(str(buffer.numberOfLines)))}} "
+                    self.print("currentLineNumber" if i + buffer.scrollY == buffer.cursorY else "lineNumber", lineNumberText, end="")
+                self.print("currentSelection" if currentLine is buffer.currentLine and isList else "default", currentLine.text, end="\r")
                 currentLine = currentLine.next
             else:
-                print(self.settings["emptyLineFill"], end="\r\n")
+                self.print("emptyLineFill", self.getSetting("emptyLineFill"), end="\r")
 
-        # Draw the current key sequence.
-        if self.commandInProgress:
-            print(self.terminal.rjust("  " + self.commandInProgress[:-1]), end="\r")
-        
-        # Draw the command bar.
-        if self.commandBuffer.currentLine.text:
-            print(self.commandBuffer.currentLine.text, end="\r")
-        else:
-            print(self.bufferName(self.currentBufferIndex), end="\r")
+            if i < height - 1:
+                print("", end="\n")
 
-        # Draw the command cursor.
-        if self.mode in ["command", "number", "openFile"]:
-            print(self.terminal.move_xy(self.commandBuffer.cursorX, self.terminal.height), end="")
-            print(self.terminal.reverse(self.commandBuffer.currentLine.text[self.commandBuffer.cursorX] \
-                if self.commandBuffer.cursorX < len(self.commandBuffer.currentLine.text) else " "), end="\r")
-        # Draw the list of open buffers.
-        elif self.mode == "switchBuffer":
-            print(self.terminal.move_xy(0, self.terminal.height - len(self.buffers) - 1) + self.terminal.clear_eos, end="")
-            print("-"*self.terminal.width, end="\r\n")
-            # List the currentBuffers.
-            for i, buffer in enumerate(self.buffers):
-                if i == self.currentBufferIndex:
-                    print(self.terminal.reverse, end="")
-                print(f"{self.bufferName(i)}", end="\r\n" if i < len(self.buffers) - 1 else "\r")
-                print(self.terminal.normal, end="")
-        # Draw the buffer cursor.
+        # Draw the cursor.
+        if not isList:
+            with self.terminal.location(buffer.cursorX + max(self.getSetting("minimumGutterWidth"), len(str(buffer.numberOfLines))) + 1, buffer.cursorY - buffer.scrollY):
+                character = buffer.currentLine.text[buffer.cursorX] if buffer.cursorX < buffer.currentLine.length() else " "
+                self.print("activeCursor" if active else "inactiveCursor", character, end="\r")
+
+    def drawStatusLine(self):
+        if self.statusLine:
+            self.print("statusLine", self.terminal.ljust(self.statusLine), end="\r")
+        elif self.currentKeySequence:
+            self.print("statusLine", self.terminal.ljust(self.currentKeySequence), end="\r")
         else:
-            print(self.terminal.move_xy(self.currentBuffer().cursorX - self.currentBuffer().scrollX + self.gutterWidth + 1, self.currentBuffer().cursorY - self.currentBuffer().scrollY), end="")
-            print(self.terminal.reverse(self.currentBuffer().currentLine.text[self.currentBuffer().cursorX] \
-                if self.currentBuffer().cursorX < len(self.currentBuffer().currentLine.text) else " "), end="\r")
+            self.print("statusLine", self.terminal.ljust(self.currentBuffer.fullName), end="\r")
+
+    def draw(self):
+        if self.needsRedraw:
+            self.needsRedraw = False
+            print(self.terminal.home + self.terminal.clear, end="")
+            self.drawBuffer(self.currentBuffer, self.bufferHeight, self.mode == "edit")
+
+            if self.getSetting("showStatusLine") or self.statusLine:
+                print("", end="\n")
+                self.drawStatusLine()
+
+            if self.mode == "findBuffer":
+                print("", end="\n")
+                self.print("prompt", "Find buffer: ", end="")
+                self.print("input", self.promptBuffer.currentLine.text) 
+                self.drawBuffer(self.listBuffer, self.listBuffer.pageHeight, True, True)
 
     def registerKeypress(self, key):
-        self.currentBindings = self.currentBindings.get(key, self.currentBindings.get("Printable" if len(key) == 1 else "Unbound", self.currentBindings.get(
+        self.currentKeybindings = self.currentKeybindings.get(key, self.currentKeybindings.get("Printable" if len(key) == 1 else "Unbound", self.currentKeybindings.get(
             "Unbound", None)))
-        if self.currentBindings is None:
-            self.currentBindings = self.keybindings[self.mode]
-            self.commandInProgress = ""
-        elif isinstance(self.currentBindings, dict):
-            self.commandInProgress += key + " "
+
+        if self.currentKeybindings is None:
+            self.currentKeybindings = self.keybindings[self.mode]
+            self.currentKeySequence = ""
+        elif isinstance(self.currentKeybindings, dict):
+            self.currentKeySequence += key + " "
         else:
-            self.currentBindings(key)
-            self.currentBindings = self.keybindings[self.mode]
-            self.commandInProgress = ""
+            self.currentKeybindings(key)
+            self.currentKeybindings = self.keybindings[self.mode]
+            self.currentKeySequence = ""
         self.needsRedraw = True
 
     def update(self):
@@ -325,16 +333,32 @@ class Editor:
             "KEY_INSERT": "Insert",
             "KEY_DELETE": "Delete",
             "KEY_TAB": "Tab",
+            "KEY_F1": "F1",
+            "KEY_F2": "F2",
+            "KEY_F3": "F3",
+            "KEY_F4": "F4",
+            "KEY_F5": "F5",
+            "KEY_F6": "F6",
+            "KEY_F7": "F7",
+            "KEY_F8": "F8",
+            "KEY_F9": "F9",
+            "KEY_F10": "F10",
+            "KEY_F11": "F11",
+            "KEY_F12": "F12",
         }
         key = self.terminal.inkey(0)
 
+        if self.currentBuffer.pageWidth != self.terminal.width or self.currentBuffer.pageHeight != self.bufferHeight:
+            self.currentBuffer.pageWidth = self.terminal.width
+            self.currentBuffer.pageHeight = self.bufferHeight
+            self.needsRedraw = True
+
         if key:
-            if self.clearCommandBuffer:
-                self.commandBuffer.close()
-                self.needsRedraw = True
-                self.clearCommandBuffer = False
+            if self.resetStatusLine:
+                self.statusLine = ""
+
             if key.is_sequence:
-                self.registerKeypress(aliases[key.name])
+                self.registerKeypress(aliases.get(key.name, key.name))
             elif str(key).isascii() and 0 <= ord(key) <= 31:
                 self.registerKeypress("Ctrl")
                 self.registerKeypress(chr(ord(key)+96).lower())
@@ -343,319 +367,25 @@ class Editor:
             elif len(str(key)) == 1 and str(key).isascii() and str(key).isprintable():
                 self.registerKeypress(str(key))
 
-    def run(self, filePaths=None):
-        if filePaths is None:
-            self.open(untitledFileName(self.workingDirectory))
-        else:
-            for path in filePaths:
-                self.open(filePaths)
-        
-        with self.terminal.raw(), self.terminal.keypad(), self.terminal.hidden_cursor():
-            while self.keepRunning:
-                if self.needsRedraw:
-                    self.draw()
-                    self.needsRedraw = False
-                self.update()
-
-        print(self.terminal.home + self.terminal.clear, end="")
-
-
-
-
-
-"""
-class Editor:
-    def __init__(self, terminal=None):
-        self.setup(terminal)
-
-    def setup(self, terminal=None):
-        self.terminal = blessed.Terminal() if terminal is None else terminal
-        self.filePath = None
-        self.documentBuffer = Buffer(self.terminal.width - 5, self.terminal.height - 1)
-        self.commandBuffer = Buffer(self.terminal.width - 5, 1)
-        self.commandBuffer.insertLineAbove()
-        self.commandMode = False  # True = focused on command bar, False = focused on document.
-        self.keepRunning = True
-        self.needsRedraw = True
-        self.readingSequence = False
-        self.unsavedChanges = False
-        self.readOnly = False
-
-    def readFromFilePath(self, filePath):
-        self.filePath = filePath
-        if not self.documentBuffer.readFromFilePath(self.filePath):
-            self.unsavedChanges = True
-
-    def writeToFile(self):
-        assert self.filePath
-        self.document.writeToFilePath(self.filePath)
-
-    def clearCommandBuffer(self):
-        self.commandBuffer.deleteLine()
-        self.commandMode = False
-
-    def printToCommandBuffer(self, text):
-        self.commandBuffer.insertText(text)
-
-    def inputFromCommandBuffer(self):
-        self.commandMode = True
-        self.commandInput = ""
-
-    def repeatAmount(self):
-        if self.commandMode and self.commandBuffer.currentLine.text:
-            return int(self.commandBuffer.currentLine.text)
-        else:
-            return 1
-
-    def printCentered(self, lines):
-        if len(lines) == 1:
-            print(self.terminal.move_x((self.terminal.width - len(lines[0]))//2) + lines[0], end="\r\n")
-        else:
-            # Find the longest line length.
-            maxLength = 0
-            for line in lines:  
-                maxLength = max(len(line), maxLength)
-
-            print(self.terminal.move_y((self.terminal.height - len(lines))//2), end="")
-            for line in lines:
-                print(self.terminal.move_x((self.terminal.width - maxLength)//2) + line, end="\r\n")
-
-    def update(self):
-        key = self.terminal.inkey(0)
-        if key.is_sequence:
-            if key.name == "KEY_ESCAPE":
-                self.readingSequence = not self.readingSequence
-            elif key.name == "KEY_UP":
-                self.documentBuffer.cursorUpLine()
-                self.needsRedraw = True
-            elif key.name == "KEY_DOWN":
-                self.documentBuffer.cursorDownLine()
-                self.needsRedraw = True
-            elif key.name == "KEY_LEFT":
-                self.documentBuffer.cursorLeftCharacter()
-                self.needsRedraw = True
-            elif key.name == "KEY_RIGHT":
-                self.documentBuffer.cursorRightCharacter()
-                self.needsRedraw = True
-            elif key.name == "KEY_ENTER":
-                self.documentBuffer.insertLine()
-                self.needsRedraw = True
-                self.unsavedChanges = True
-            elif key.name == "KEY_BACKSPACE":
-                if self.commandMode:
-                    self.commandBuffer.deleteCharacterLeft()
-                else:
-                    self.documentBuffer.deleteCharacterLeft()
-                    self.unsavedChanges = True
-                self.needsRedraw = True
-            elif key.name == "KEY_TAB":
-                self.documentBuffer.insertText("    ")
-                self.needsRedraw = True
-                self.unsavedChanges = True
-        elif key and self.readingSequence or self.commandMode:
-            if key == "i":
-                self.documentBuffer.cursorUpLine(self.repeatAmount())
-                self.needsRedraw = True
-                self.clearCommandBuffer()
-            elif key == "k":
-                self.documentBuffer.cursorDownLine(self.repeatAmount())
-                self.needsRedraw = True
-                self.clearCommandBuffer()
-            elif key == "j":
-                self.documentBuffer.cursorLeftCharacter(self.repeatAmount())
-                self.needsRedraw = True
-                self.clearCommandBuffer()
-            elif key == "l":
-                self.documentBuffer.cursorRightCharacter(self.repeatAmount())
-                self.needsRedraw = True
-                self.clearCommandBuffer()
-            elif key == "u":
-                self.documentBuffer.cursorLeftWord(self.repeatAmount())
-                self.needsRedraw = True
-                self.clearCommandBuffer()
-            elif key == "U":
-                self.documentBuffer.cursorLeftWORD(self.repeatAmount())
-                self.needsRedraw = True
-                self.clearCommandBuffer()
-            elif key == "o":
-                self.documentBuffer.cursorRightWord(self.repeatAmount())
-                self.needsRedraw = True
-                self.clearCommandBuffer()
-            elif key == "O":
-                self.documentBuffer.cursorRightWORD(self.repeatAmount())
-                self.needsRedraw = True
-                self.clearCommandBuffer()
-            elif key == "p":
-                self.documentBuffer.cursorWordEnd(self.repeatAmount())
-                self.needsRedraw = True
-                self.clearCommandBuffer()
-            elif key == ";":
-                self.documentBuffer.cursorWordEndLeft(self.repeatAmount())
-                self.needsRedraw = True
-                self.clearCommandBuffer()
-            elif key == "y":
-                self.documentBuffer.cursorUpHalfPage(self.repeatAmount())
-                self.needsRedraw = True
-                self.clearCommandBuffer()
-            elif key == "Y":
-                self.documentBuffer.cursorUpPage(self.repeatAmount())
-                self.needsRedraw = True
-                self.clearCommandBuffer()
-            elif key == "h":
-                self.documentBuffer.cursorDownHalfPage(self.repeatAmount())
-                self.needsRedraw = True
-                self.clearCommandBuffer()
-            elif key == "H":
-                self.documentBuffer.cursorDownPage(self.repeatAmount())
-                self.needsRedraw = True
-                self.clearCommandBuffer()
-            elif key == "s":
-                self.documentBuffer.cursorBeginLine(self.repeatAmount())
-                self.needsRedraw = True
-                self.clearCommandBuffer()
-            elif key == "e":
-                self.documentBuffer.cursorEndLine(self.repeatAmount())
-                self.needsRedraw = True
-                self.clearCommandBuffer()
-            elif key == "a":
-                self.documentBuffer.insertLineAbove(self.repeatAmount())
-                self.needsRedraw = True
-                self.unsavedChanges = True
-                self.clearCommandBuffer()
-            elif key == "b":
-                self.documentBuffer.insertLineBelow(self.repeatAmount())
-                self.needsRedraw = True
-                self.unsavedChanges = True
-                self.clearCommandBuffer()
-            elif key == "d":
-                self.documentBuffer.deleteCharacter(self.repeatAmount())
-                self.needsRedraw = True
-                self.unsavedChanges = True
-                self.clearCommandBuffer()
-            elif key == "D":
-                self.documentBuffer.deleteLine(self.repeatAmount())
-                self.needsRedraw = True
-                self.unsavedChanges = True
-                self.clearCommandBuffer()
-            elif key.isdigit():
-                self.commandBuffer.insertText(key)
-                self.commandMode = True
-                self.needsRedraw = True
-            elif key == "q":
-                self.clearCommandBuffer()
-                self.needsRedraw = True
-            self.readingSequence = False
-        elif key == "\x11":  # Ctrl-Q.
-            if self.unsavedChanges:
-                self.clearCommandBuffer()
-                self.printToCommandBuffer("File has unsaved changes. Press Ctrl-E to exit without saving.")
-                self.needsRedraw = True
-            else:
-                self.keepRunning = False
-        elif key == "\x05":  # Ctrl-E.
-            self.keepRunning = False
-        elif key == "\x13":  # Ctrl-S.
-            self.documentBuffer.writeToFilePath(self.filePath)
-            self.clearCommandBuffer()
-            self.unsavedChanges = False
-            self.needsRedraw = True
-        elif key == "\x03":  # Ctrl-C.
-            self.clearCommandBuffer()
-            self.needsRedraw = True
-        elif key == "\x02":  # Ctrl-B.
-            # Print help screen.
-            print(self.terminal.home + self.terminal.clear, end="")
-            print()
-            print()
-            self.printCentered(["KEYBINDINGS"])
-            self.printCentered(["(press any key to hide)"])
-            helpMessage = [
-                "Basic Commands",
-                "Ctrl-b: show keybindings",
-                "Ctrl-s: save file",
-                "Ctrl-q: quit",
-                "Ctrl-e: exit without saving",
-                "Ctrl-c: clear status bar",
-                "",
-                "Navigation",
-                "Arrow keys: move cursor",
-                "Alt-j: cursor left",
-                "Alt-l: cursor right",
-                "Alt-i: cursor up",
-                "Alt-k: cursor down",
-                "Alt-s: cursor to line start",
-                "Alt-e: cursor to line end",
-                "Alt-y: cursur up half page",
-                "Alt-Y: cursor up whole page",
-                "Alt-h: cursor down half page",
-                "Alt-H: cursor down whole page",
-                "",
-                "Editing",
-                "Alt-a: insert line above",
-                "Alt-b: insert line below",
-                "Alt-d: delete character under cursor",
-                "Alt-D: delete line",
-            ]
-            self.printCentered(helpMessage)
-            self.terminal.inkey(None)
-            print(self.terminal.home + self.terminal.clear, end="")
-            self.clearCommandBuffer()
-            self.commandMode = False
-            self.needsRedraw = True
-        elif key and str(key).isascii() and str(key).isprintable():
-            self.documentBuffer.insertText(str(key))
-            self.clearCommandBuffer()
-            self.needsRedraw = True
-            self.unsavedChanges = True
-        elif key:
-            self.commandBuffer.currentLine.setText(repr(key))
-            self.needsRedraw = True
-
-    def draw(self):
-        print(self.terminal.home + self.terminal.clear, end="")
-        # Draw the document.
-        currentLine = self.documentBuffer.topLine
-        for i in range(self.terminal.height - 1):
-            if currentLine is not None:
-                text = currentLine.text[:self.terminal.width - 5] if len(currentLine.text) > self.terminal.width - 5 else currentLine.text
-                print(f"{self.documentBuffer.scrollY + i + 1:>4} {text}", end="\r\n")
-                currentLine = currentLine.next
-            else:
-                print("~", end="\r\n")
-        
-        # Draw the command bar.
-        if self.commandBuffer.hasLine() and self.commandBuffer.currentLine.text or self.commandMode:
-            print(self.commandBuffer.currentLine.text, end="\r")
-        else:
-            if self.unsavedChanges:
-                print("[+] ", end="")
-            elif self.readOnly:
-                print("[RO] ", end="")
-            maxPathLength = self.terminal.width - len("[RO] ...")
-            print("..." + self.filePath[len(self.filePath)-maxPathLength:] if len(self.filePath) > maxPathLength else self.filePath, end="\r")
-        
-        # Draw the cursor.
-        if self.commandMode:
-            print(self.terminal.move_xy(self.commandBuffer.cursorX, self.terminal.height), end="")
-            print(self.terminal.reverse(self.commandBuffer.currentLine.text[self.commandBuffer.cursorX] \
-                if self.commandBuffer.cursorX < len(self.commandBuffer.currentLine.text) else " "), end="\r")
-        else:
-            print(self.terminal.move_xy(self.documentBuffer.cursorX - self.documentBuffer.scrollX + 5, self.documentBuffer.cursorY - self.documentBuffer.scrollY), end="")
-            print(self.terminal.reverse(self.documentBuffer.currentLine.text[self.documentBuffer.cursorX] \
-                if self.documentBuffer.cursorX < len(self.documentBuffer.currentLine.text) else " "), end="\r")
-
-    def run(self, filePath=None):
+    def run(self, filePaths=[]):
         self.setup()
-        with self.terminal.raw(), self.terminal.keypad(), self.terminal.hidden_cursor():
-            if filePath is None:
-                self.readFromFilePath("untitled.txt")
-            else:
-                self.readFromFilePath(filePath)
+        for path in filePaths:
+            self.open(path)
+        self.open("notes.txt")
+        self.open("example.txt")
+        self.newBuffer("untitled 1")
+        self.newBuffer("untitled 2")
+        self.newBuffer("untitled 3")
+        self.newBuffer("untitled 4")
+        self.newBuffer("penispenispnesip")
+        self.newBuffer("untitled 5")
+        self.switchToBuffer(0)
 
+        with self.terminal.raw(), self.terminal.keypad(), self.terminal.hidden_cursor():
             while self.keepRunning:
                 if self.needsRedraw:
                     self.draw()
                     self.needsRedraw = False
                 self.update()
         print(self.terminal.home + self.terminal.clear, end="")
-"""
+
