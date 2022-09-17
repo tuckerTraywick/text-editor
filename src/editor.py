@@ -1,69 +1,73 @@
+import os
 import blessed
 from buffer import Buffer
-
-
-def untitledFileName(directory):
-    # TODO: Make this append a number to the end of the file name if one already exists.
-    return "untitled"
 
 
 class Editor:
     def __init__(self):
         self.terminal = blessed.Terminal()
         self.settings = {
-            "visualTabWidth": 4,
-            "softTabWidth": 4,
-            "minimumGutterWidth": 2,
-            "maximumListSize": 5,
-            "emptyLineFill": "~",
-            "softTabs": False,
-            "showLineNumbers": True,
-            "relativeLineNumbers": False,
-            "showEmptyLineFill": True,
-            "showStatusLine": True,
-            "highlighting": False,
+            "all": {
+                "defaultMode": "all",
+                "visualTabWidth": 4,
+                "softTabWidth": 4,
+                "minimumGutterWidth": 2,
+                "maximumListHeight": self.terminal.height//3,
+                "emptyLineFill": "~",
+                "softTabs": True,
+                "showLineNumbers": True,
+                "relativeLineNumbers": False,
+                "showEmptyLineFill": True,
+                "showStatusLine": True,
+                "syntaxHighlighting": False,
+                "highlightCurrentLineNumber": True,
+                "highlightCurrentLine": True,
+            },
         }
-        self.colorscheme = {
-            "default": self.terminal.normal,
-            "lineNumber": self.terminal.normal,
-            "currentLineNumber": self.terminal.bright,
-            "currentLine": self.terminal.normal,
-            "currentSelection": self.terminal.reverse,
-            "emptyLineFill": self.terminal.normal,
-            "statusLine": self.terminal.reverse,
-            "prompt": self.terminal.bold,
-            "input": self.terminal.normal,
-            "activeCursor": self.terminal.reverse,
-            "inactiveCursor": self.terminal.reverse_underline,
+        self.colors = {
+            "all": {
+                "default": self.terminal.normal,
+                "lineNumber": self.terminal.normal,
+                "currentLineNumber": self.terminal.bright,
+                "currentLine": self.terminal.normal,
+                "currentSelection": self.terminal.reverse,
+                "emptyLineFill": self.terminal.normal,
+                "statusLine": self.terminal.reverse,
+                "prompt": self.terminal.bold,
+                "input": self.terminal.normal,
+                "activeCursor": self.terminal.reverse,
+                "inactiveCursor": self.terminal.reverse_underline,
+                "file": self.terminal.normal,
+                "workingDirectory": self.terminal.italic,
+                "directory": self.terminal.normal,
+            },
         }
-        self.keybindings = {
-            "edit": {},
-            "find": {},
-            "findInBuffers": {},
-            "findInFiles": {},
-            "replace": {},
-            "findBuffer": {},
-            "findFile": {},
-        }
+        self.keybindings = {"all": {},}
+        self.actions = {"all": {},}
+        self.mode = "all"
         self.setup()
 
     def setup(self):
-        self.mode = "edit"
-        self.workingDirectory = ""
+        self.mode = self.getSetting("defaultMode")
+        self.workingDirectory = os.getcwd()
         self.currentKeybindings = self.keybindings[self.mode]
+        self.currentGlobalKeybindings = self.keybindings["all"]
         self.currentKeySequence = ""
         self.statusLine = ""
-        self.scratchBuffer = Buffer(self.terminal.width, self.bufferHeight, self.settings.get("visualTabwidth", 4), self.settings.get("softTabWidth", 4), index=-1, name="*scratch*")
-        self.clipboardBuffer = Buffer(self.terminal.width, self.bufferHeight, self.settings.get("visualTabWidth", 4), self.settings.get("softTabWidth", 4), index=-1, name="*clipboard*")
-        self.promptBuffer = Buffer(self.terminal.width, 1, self.settings.get("visualTabWidth", 4), self.settings.get("softTabWidth", 4), index=-1, name="*prompt*")
-        self.listBuffer = Buffer(self.terminal.width, 1, self.settings.get("visualTabWidth", 4), self.settings.get("softTabWidth", 4), index=-1, name="*list*")
+        #self.scratchBuffer = Buffer(self.terminal.width, self.documentHeight, self.getSetting("visualTabWidth"), self.getSetting("softTabWidth"),  name="*scratch*")
+        #self.clipboardBuffer = Buffer(self.terminal.width, self.documentHeight, self.getSetting("visualTabWidth"), self.getSetting("softTabWidth"),  name="*clipboard*")
+        self.findPromptBuffer = Buffer(self.terminal.width, 1, self.getSetting("visualTabWidth"), self.getSetting("softTabWidth"),  name="*find*")
+        self.replacePromptBuffer = Buffer(self.terminal.width, 1, self.getSetting("visualTabWidth"), self.getSetting("softTabWidth"),  name="*replace*")
+        self.listBuffer = Buffer(self.terminal.width, 1, self.getSetting("visualTabWidth"), self.getSetting("softTabWidth"),  name="*results*")
         self.buffers = []
         self.searchResults = []
+        self.currentSearchResultIndex = 0
+        self.inputBuffer = None
+        self.displayBuffer = None
         self.currentBufferIndex = 0
         self.previousBufferIndex = 0
-        self.bufferIndexBeforeSearch = self.currentBufferIndex
         self.keepRunning = True
-        self.needsRedraw = True
+        self.redraw = True
         self.resetStatusLine = True
 
     @property
@@ -75,39 +79,98 @@ class Editor:
         return self.buffers[self.previousBufferIndex]
 
     @property
-    def focusedBuffer(self):
-        return self.currentBuffer if self.mode == "edit" else self.promptBuffer
+    def currentActions(self):
+        return self.actions[self.mode]
 
     @property
-    def bufferHeight(self):
-        height = self.terminal.height - 1 if self.getSetting("showStatusLine") or self.statusLine else self.terminal.height
-        if self.mode in ["findBuffer", "findFile"]:
-            height -= self.promptBuffer.numberOfLines + self.listBuffer.pageHeight
-        return height
+    def currentSearchResult(self):
+        return self.searchResults[self.currentSearchResultIndex]
+
+    @property
+    def documentHeight(self):
+        return self.terminal.height - self.runAction("overlap")
+
+    @property
+    def searchTerms(self):
+        search = self.findPromptBuffer.currentLine.text.strip()
+        if search:
+            return [term for term in self.findPromptBuffer.currentLine.text.split(" ") if term]
+        else:
+            return [""]
+
+    def addMode(self, name, actions):
+        self.settings[name] = {}
+        self.keybindings[name] = {}
+        self.colors[name] = {}
+        self.actions[name] = {
+            "begin": self.defaultBegin,
+            "end": self.defaultEnd,
+            "draw": self.defaultDraw,
+            "drawStatusLine": self.defaultDrawStatusLine,
+            "overlap": self.defaultOverlap,
+            "refreshSearchResults": None,
+            "chooseSearchResult": None,
+            "nextSearchResult": None,
+            "previousSearchResult": None,
+        }
+        self.actions[name].update(actions)
+
+    def removeMode(self, *modes):
+        for mode in modes:
+            del self.settings[mode], self.keybindings[mode], self.colors[mode], self.actions[mode]
 
     def getSetting(self, *settings):
         if len(settings) == 1:
-            return self.settings[settings[0]]
+            if settings[0] in self.settings[self.mode]:
+                return self.settings[self.mode][settings[0]]
+            else:
+                return self.settings["all"][settings[0]]
         else:
-            return {s: self.settings[s] for s in self.settings if s in self.settings}
+            return {s: self.getSetting(s) for s in self.settings if s in self.settings}
 
-    def setSetting(self, setting, value):
-        self.settings[setting] = value
+    def setSetting(self, mode, setting, value):
+        if isinstance(mode, list):
+            for m in mode:
+                self.setSetting(m, setting, value)
+            return
+        self.settings[mode][setting] = value
 
-    def setSettings(self, settings):
-        self.settings.update(settings)
+    def setSettings(self, mode, settings):
+        if isinstance(mode, list):
+            for m in mode:
+                self.setSettings(m, settings)
+            return
+        self.settings[mode].update(settings)
+
+    def removeSetting(self, mode, *settings):
+        if isinstance(mode, list):
+            for m in mode:
+                self.removeSetting(m, settings)
+            return
+
+        for setting in settings:
+            if setting in self.settings[mode]:
+                del self.settings[mode][setting]
 
     def getColor(self, *colors):
         if len(colors) == 1:
-            return self.colorscheme[colors[0]]
+            if colors[0] in self.colors[self.mode]:
+                return self.colors[self.mode][colors[0]]
+            else:
+                return self.colors["all"][colors[0]]
         else:
-            return {c: self.colorscheme[c] for c in self.colorscheme if c in self.colorscheme}
+            return {c: self.colors[self.mode][c] for c in self.colors if c in self.colors}
 
-    def setColor(self, textType, color):
-        self.colorscheme[textType] = color
+    def setColor(self, mode, textType, color):
+        self.colors[mode][textType] = color
 
-    def setColors(self, colors):
-        self.colorscheme.update(colors)
+    def setColors(self, mode, colors):
+        self.colors[mode].update(colors)
+
+    def removeColor(self, mode, *colors):
+        for color in colors:
+            if color in self.colors[mode]:
+                del self.colors[mode][color]
 
     def addKeybinding(self, modes, sequence, action):
         if isinstance(modes, list):
@@ -121,18 +184,11 @@ class Editor:
                 if key != mode[1:]:
                     self.addKeybinding(key, sequence, action)
             return
-        elif mode == "all":
-            for key in self.keybindings:
-                self.addKeybinding(key, sequence, action)
-            return
 
         if isinstance(sequence, list):
             for seq in sequence:
                 self.addKeybinding(modes, seq, action)
             return
-
-        if mode not in self.keybindings:
-            self.keybindings[mode] = {}
 
         currentBinding = self.keybindings[mode]
         previousBinding = currentBinding
@@ -143,256 +199,97 @@ class Editor:
             currentBinding = currentBinding[key]
         previousBinding[key] = action
 
-    def newBuffer(self, name="untitled"):
-        self.previousBufferIndex = self.currentBufferIndex
-        self.currentBufferIndex = len(self.buffers)
-        self.buffers.append(Buffer(self.terminal.width, self.bufferHeight, self.settings["visualTabWidth"], 
-            self.settings["softTabWidth"], self.currentBufferIndex, name))
-        self.mode = "edit"
-        self.needsRedraw = True
+    def removeKeybinding(modes, *bindings):
+        pass
 
-    def openInPlace(self, filePath):
-        if self.buffers:
-            self.currentBuffer.open(filePath)
-        else:
-            self.newBuffer()
-            self.currentBuffer.open(filePath)
-        self.currentBuffer.name = filePath
-        self.needsRedraw = True
+    def runAction(self, action):
+        return self.currentActions[action]()
 
-    def open(self, *filePaths):
-        for path in filePaths:
-            self.newBuffer()
-            self.openInPlace(path)
-
-    def switchToBuffer(self, bufferIndex):
-        if bufferIndex != self.currentBufferIndex:
-            self.previousBufferIndex = self.currentBufferIndex
-            self.currentBufferIndex = bufferIndex
-            self.needsRedraw = True
-
-    def saveBuffer(self, key=None):
-        if self.currentBuffer.hasUnsavedChanges:
-            self.currentBuffer.write(self.workingDirectory + self.currentBuffer.name)
-            self.satusLine = f"{self.currentBuffer.name} saved."
-            self.needsRedraw = True
-            self.clearStatusLine = True
-
-    def saveAllBuffers(self, key=None):
-        for buffer in self.buffers:
-            if buffer.hasUnsavedChanges:
-                buffer.write(self.workingDirectory + self.currentBuffer.name)
-                self.statusLine = "All buffers saved."
-                self.needsRedraw = True
-                self.clearStatusLine = True
-
-    def killBuffer(self, key=None):
-        self.currentBuffer.clear()
-        if len(self.buffers) == 1:
-            self.currentBuffer.clear()
-            self.currentBuffer.name = untitledFileName(self.workingDirectory)
-        else:
-            del self.buffers[self.currentBufferIndex]
-            if self.currentBufferIndex == len(self.buffers):
-                self.currentBufferIndex -= 1
-        self.previousBufferIndex = self.currentBufferIndex
-        self.needsRedraw = True
-
-    def closeBuffer(self, key=None):
-        if self.currentBuffer.hasUnsavedChanges:
-            self.statusLine = "This buffer has unsaved changes. Press Ctrl x to kill the buffer without saving."
-            self.needsRedraw = True
-            self.clearStatusLine = True
-        else:
-            self.killBuffer(key)
-
-    def switchToPreviousBuffer(self, key=None):
-        if self.currentBufferIndex != self.previousBufferIndex:
-            self.previousBufferIndex, self.previousBufferIndex = self.currentBufferIndex, self.currentBufferIndex
-            self.needsRedraw = True
-
-    def bufferForward(self, key=None):
-        if self.currentBufferIndex < len(self.buffers) - 1:
-            self.currentBufferIndex += 1
-            self.needsRedraw = True
-            if self.mode == "findBuffer":
-                self.listBuffer.cursorLineDown()
-
-    def bufferBackward(self, key=None):
-        if self.currentBufferIndex > 0:
-            self.currentBufferIndex -= 1
-            self.needsRedraw = True
-            if self.mode == "findBuffer":
-               self.listBuffer.cursorLineUp()
-
-    def cursorCharacterRight(self, key=None):
-        self.needsRedraw = self.focusedBuffer.cursorY < self.focusedBuffer.numberOfLines or self.focusedBuffer.cursorX < self.focusedBuffer.currentLine.length() \
-            or self.focusedBuffer.scrollY < self.focusedBuffer.numberOfLines - 1
-        self.focusedBuffer.cursorCharacterRight()
-
-    def cursorCharacterLeft(self, key=None):
-        self.needsRedraw = self.focusedBuffer.cursorY > 0 or self.focusedBuffer.cursorX > 0
-        self.focusedBuffer.cursorCharacterLeft()
-
-    def cursorLineUp(self, key=None):
-        self.needsRedraw = self.focusedBuffer.cursorY > 0 or self.focusedBuffer.cursorX > 0
-        self.focusedBuffer.cursorLineUp()
-
-    def cursorLineDown(self, key=None):
-        self.needsRedraw = self.focusedBuffer.cursorY < self.focusedBuffer.numberOfLines or self.focusedBuffer.cursorX < self.focusedBuffer.currentLine.length() \
-            or self.focusedBuffer.scrollY < self.focusedBuffer.numberOfLines - 1
-        self.focusedBuffer.cursorLineDown()
-
-    def cursorLineStart(self, key=None):
-        self.needsRedraw = self.focusedBuffer.cursorX > 0 or self.focusedBuffer.cursorY > 0
-        self.focusedBuffer.cursorLineStart()
-
-    def cursorLineEnd(self, key=None):
-        self.needsRedraw = self.focusedBuffer.cursorX < self.focusedBuffer.currentLine.length() or self.focusedBuffer.cursorY < self.focusedBuffer.numberOfLines - 1
-        self.focusedBuffer.cursorLineEnd()
-
-    def insertLineAbove(self, key=None):
-        self.focusedBuffer.insertLineAbove()
-        self.needsRedraw = True
-
-    def insertLineBelow(self, key=None):
-        self.focusedBuffer.insertLineBelow()
-        self.needsRedraw = True
-
-    def insertCharacter(self, key):
-        if key == "Space":
-            self.focusedBuffer.insert(1, " ")
-        else:
-            self.focusedBuffer.insert(1, key)
-
-        if self.mode == "findBuffer":
-            self.fillBufferList()
-        self.needsRedraw = True
-
-    def delete(self, key=None):
-        self.focusedBuffer.delete()
-        self.needsRedraw = True
-
-    def deleteCharacterLeft(self, key=None):
-        self.focusedBuffer.deleteCharacterLeft()
-        self.needsRedraw = True
-
-    def deleteCharacterRight(self, key=None):
-        self.focusedBuffer.deleteCharacterRight()
-        self.needsRedraw = True
-
-    def deleteLine(self, key=None):
-        self.focusedBuffer.deleteLine()
-        self.needsRedraw = True
-
-    def quit(self, key=None):
-        for i, buffer in enumerate(self.buffers):
-            if buffer.hasUnsavedChanges:
-                self.statusLine = "A buffer has unsaved changes. Press Ctrl e to exit without saving."
-                self.needsRedraw = True
-                self.clearStatusLine = True
-                return
-        self.keepRunning = False
-        
-    def exit(self, key=None):
-        self.keepRunning = False
-
-    def chooseBuffer(self, key=None):
-        self.setMode("edit")(key)
-        self.bufferIndexBeforeSearch = self.currentBufferIndex
-
-    def cancelBufferSearch(self, key=None):
-        self.currentBufferIndex = self.bufferIndexBeforeSearch
-        self.setMode("edit")(key)
-
-    def fillBufferList(self):
-        self.listBuffer.clear()
-        search = self.promptBuffer.currentLine.text
-        numberOfResults = 0
-        for i, buffer in enumerate(self.buffers):
-            if search in buffer.name:
-                self.listBuffer.insert(1, f"{buffer.fullName}")
-                if i < len(self.buffers) - 1:
-                    self.listBuffer.insertLineBelow()
-                numberOfResults += 1
-        self.listBuffer.pageHeight = min(numberOfResults, self.getSetting("maximumListSize"))
-        self.listBuffer.cursorBufferStart()
-        self.listBuffer.cursorLineDown(self.currentBufferIndex)
-
-    def setMode(self, mode):
-        def process(key):
-            self.mode = mode
-            self.needsRedraw = True
-            if mode == "findBuffer":
-                self.promptBuffer.clear()
-                self.fillBufferList()
-        return process
+    def untitledFileName(self):
+        # TODO: Make this append a number to the end of the name to make it unique.
+        return "untitled"
 
     def print(self, color, text, end="\r\n"):
-        colorCode = self.colorscheme[color]
+        if color in self.colors[self.mode]:
+            colorCode = self.colors[self.mode][color]
+        else:
+            colorCode = self.colors["all"][color]
+            
         if isinstance(colorCode, str):
             print(colorCode + text, end=end)
         else:
             print(colorCode(text), end=end)
         print(self.terminal.normal, end="")
 
-    def drawStatusLine(self):
-        if self.statusLine:
-            self.print("statusLine", self.terminal.ljust(self.statusLine), end="\r")
-        elif self.currentKeySequence:
-            self.print("statusLine", self.terminal.ljust(self.currentKeySequence), end="\r")
-        elif self.mode == "findBuffer":
-            self.print("statusLine", self.terminal.ljust(self.buffers[self.bufferIndexBeforeSearch].fullName), end="\r")
-        else:
-            self.print("statusLine", self.terminal.ljust(self.currentBuffer.fullName), end="\r")
+    def printToStatusLine(self, text):
+        self.statusLine = text
+        self.redraw = True
+        self.resetStatusLine = True
 
-    def drawPrompt(self, text):
+    def printPrompt(self, text, buffer, y):
         self.print("prompt", text, end="")
-        self.promptBuffer.draw(self, 1, len(text), self.terminal.height,
+        buffer.draw(self, 1, len(text), y,
             showLineNumbers=False, relativeLineNumbers=False,
             showEmptyLineFill=False, showCursor=True,
             activeCursor=True, highlightCurrentLine=False)
 
+    def newBuffer(self, name=None):
+        if name is None:
+            name = self.untitledFileName()
+        self.previousBufferIndex = self.currentBufferIndex
+        self.currentBufferIndex = len(self.buffers)
+        self.buffers.append(Buffer(self.terminal.width, self.terminal.height, self.getSetting("visualTabWidth"), 
+            self.getSetting("visualTabWidth"), name))
+
+    def openFileInPlace(self, filePath):
+        filePath = os.path.join(self.workingDirectory, filePath)
+        if self.buffers:
+            self.currentBuffer.open(filePath)
+        else:
+            self.newBuffer()
+            self.currentBuffer.open(filePath)
+        self.currentBuffer.name = filePath
+
+    def openFile(self, *filePaths):
+        for path in filePaths:
+            for i, buffer in enumerate(self.buffers):
+                if buffer.name == path:
+                    self.switchToBuffer(i)
+                    break
+            else:
+                self.newBuffer()
+                self.openFileInPlace(path)
+
+    def switchToBuffer(self, bufferIndex):
+        if bufferIndex != self.currentBufferIndex:
+            self.previousBufferIndex = self.currentBufferIndex
+            self.currentBufferIndex = bufferIndex
+
     def draw(self):
-        if self.needsRedraw:
-            self.needsRedraw = False
+        if self.redraw:
+            self.redraw = False
             print(self.terminal.home + self.terminal.clear + self.terminal.home, end="")
-
-            # Draw the current buffer.
-            self.currentBuffer.draw(self, self.bufferHeight, 0, 0,
-                showLineNumbers=self.getSetting("showLineNumbers"), relativeLineNumbers=self.getSetting("relativeLineNumbers"),
-                showEmptyLineFill=self.getSetting("showEmptyLineFill"), showCursor=True,
-                activeCursor=self.mode == "edit", highlightCurrentLine=True)
-
-            # Draw the status line.
-            if self.getSetting("showStatusLine") or self.statusLine:
-                print("", end="\n")
-                self.drawStatusLine()
-
-            # Draw the buffer list.
-            if self.mode == "findBuffer":
-                print("", end="\n")
-                self.listBuffer.draw(self, self.listBuffer.pageHeight, 0, 0,
-                    showLineNumbers=True, relativeLineNumbers=False,
-                    showEmptyLineFill=False, showCursor=False,
-                    activeCursor=False, highlightCurrentLine=True)
-                print("", end="\r\n")
-                self.drawPrompt("Find buffer: ")
+            self.runAction("draw")
 
     def registerKeypress(self, key):
+        if self.currentGlobalKeybindings is not None:
+            self.currentGlobalKeybindings = self.currentGlobalKeybindings.get(key, self.currentGlobalKeybindings.get("Printable" if len(key) == 1 else "Unbound", 
+                None))
         self.currentKeybindings = self.currentKeybindings.get(key, self.currentKeybindings.get("Printable" if len(key) == 1 else "Unbound", self.currentKeybindings.get(
-            "Unbound", None)))
+            "Unbound", self.currentGlobalKeybindings)))
 
         if self.currentKeybindings is None:
             self.currentKeybindings = self.keybindings[self.mode]
+            self.currentGlobalKeybindings = self.keybindings["all"]
             self.currentKeySequence = ""
         elif isinstance(self.currentKeybindings, dict):
             self.currentKeySequence += key + " "
         else:
             self.currentKeybindings(key)
             self.currentKeybindings = self.keybindings[self.mode]
+            self.currentGlobalKeybindings = self.keybindings["all"]
             self.currentKeySequence = ""
-        self.needsRedraw = True
+        self.redraw = True
 
     def update(self):
         aliases = {
@@ -421,11 +318,6 @@ class Editor:
         }
         key = self.terminal.inkey(0)
 
-        if self.currentBuffer.pageWidth != self.terminal.width or self.currentBuffer.pageHeight != self.bufferHeight:
-            self.currentBuffer.pageWidth = self.terminal.width
-            self.currentBuffer.pageHeight = self.bufferHeight
-            self.needsRedraw = True
-
         if key:
             if self.resetStatusLine:
                 self.statusLine = ""
@@ -440,25 +332,408 @@ class Editor:
             elif len(str(key)) == 1 and str(key).isascii() and str(key).isprintable():
                 self.registerKeypress(str(key))
 
-    def run(self, filePaths=[]):
+    def run(self, *filePaths):
         self.setup()
         for path in filePaths:
             self.open(path)
-        self.open("notes.txt")
-        self.open("example.txt")
-        self.newBuffer("untitled 1")
-        self.newBuffer("untitled 2")
-        self.newBuffer("untitled 3")
-        self.newBuffer("untitled 4")
-        self.newBuffer("penispenispnesip")
-        self.newBuffer("untitled 5")
+        self.openFile("notes.txt")
+        self.openFile("example.txt")
         self.switchToBuffer(0)
+        self.runAction("begin")
 
         with self.terminal.raw(), self.terminal.keypad(), self.terminal.hidden_cursor():
             while self.keepRunning:
-                if self.needsRedraw:
-                    self.draw()
-                    self.needsRedraw = False
+                self.draw()
                 self.update()
         print(self.terminal.home + self.terminal.clear, end="")
+
+    def defaultBegin(self):
+        pass
+
+    def defaultEnd(self):
+        pass
+
+    def defaultDraw(self):
+        # Draw the current buffer.
+        self.displayBuffer.draw(self, self.documentHeight, 0, 0,
+            showLineNumbers=self.getSetting("showLineNumbers"), relativeLineNumbers=self.getSetting("relativeLineNumbers"),
+            showEmptyLineFill=self.getSetting("showEmptyLineFill"), showCursor=True,
+            activeCursor=self.mode == "edit", highlightCurrentLine=True)
+
+        # Draw the status line.
+        if self.getSetting("showStatusLine") or self.statusLine:
+            print("", end="\n")
+            self.runAction("drawStatusLine")
+
+    def defaultDrawStatusLine(self):
+        if self.statusLine:
+            self.print("statusLine", self.terminal.ljust(self.statusLine), end="\r")
+        elif self.currentKeySequence:
+            self.print("statusLine", self.terminal.ljust(self.currentKeySequence), end="\r")
+        else:
+            self.print("statusLine", self.terminal.ljust(self.currentBuffer.fullName + " | " + self.mode), end="\r")
+
+    def defaultOverlap(self):
+        return 1 if self.getSetting("showStatusLine") else 0
+
+    def homeMenuDraw(self):
+        self.print("default", self.terminal.center("Text Editor"))
+
+    def editBegin(self):
+        self.inputBuffer = self.displayBuffer = self.currentBuffer
+        self.redraw = True
+
+    def editEnd(self):
+        pass
+
+    def findBufferBegin(self):
+        self.findPromptBuffer.clear()
+        self.refreshSearchResults()
+        self.currentBuffer.pageHeight = self.documentHeight
+        self.inputBuffer = self.findPromptBuffer
+        self.displayBuffer = self.currentBuffer
+
+    def findBufferEnd(self):
+        self.findPromptBuffer.clear()
+        self.listBuffer.clear()
+
+    def findBufferDraw(self):
+        # Draw the document if not in fullscreen mode.
+        if not self.getSetting("fullscreen"):
+            self.defaultDraw()
+            print("", end="\n")
+        
+        # Set the height of the document and draw the prompt first if in fullscreen mode.
+        if self.getSetting("fullscreen"):
+            height = min(self.terminal.height - 1, self.listBuffer.numberOfLines)
+            self.printPrompt("Find buffer: ", self.findPromptBuffer, 0)
+            print("", end="\r\n")
+        else:
+            height = min(self.getSetting("maximumListHeight"), self.listBuffer.numberOfLines)
+
+        # Draw the search results.
+        if self.searchResults:
+            self.listBuffer.draw(self, height, 0, 0,
+                showLineNumbers=True, relativeLineNumbers=False,
+                showEmptyLineFill=False, showCursor=False,
+                activeCursor=False, highlightCurrentLine=True)
+        else:
+            self.print("lineNumber", "No results", end="\r")
+
+        # Draw the prompt last if not in fullscreen mode.
+        if not self.getSetting("fullscreen"):
+            print("", end="\r\n")
+            self.printPrompt("Find buffer: ", self.findPromptBuffer, self.terminal.height)
+
+    def findBufferRefreshSearchResults(self):
+        self.searchResults = []
+        self.currentSearchResultIndex = 0
+        for i, buffer in enumerate(self.buffers):
+            for term in self.searchTerms:
+                if term in buffer.name:
+                    self.searchResults.append((buffer.fullName, i, buffer))
+                    break
+
+        if self.searchResults:
+            self.displayBuffer = self.searchResults[0][2]
+        else:
+            self.displayBuffer = self.currentBuffer
+
+    def findBufferChooseSearchResult(self):
+        if self.searchResults:
+            self.previousBufferIndex = self.currentBufferIndex
+            self.currentBufferIndex = self.currentSearchResult[1]
+        self.setMode("edit")()
+
+    def findBufferNextSearchResult(self):
+        self.displayBuffer = self.currentSearchResult[2]
+
+    def findBufferPreviousSearchResult(self):
+        self.displayBuffer = self.currentSearchResult[2]
+
+    def findBufferOverlap(self):
+        if self.getSetting("fullscreen"):
+            return 0
+        else:
+            return max(1, min(self.listBuffer.numberOfLines, self.getSetting("maximumListHeight"))) + 1 + (1 if self.getSetting("showStatusLine") else 0)
+
+    def findFileBegin(self):
+        self.findPromptBuffer.clear()
+        self.refreshSearchResults()
+        self.currentBuffer.pageHeight = self.documentHeight
+        self.inputBuffer = self.findPromptBuffer
+        self.displayBuffer = self.currentBuffer
+
+    def findFileEnd(self):
+        self.findPromptBuffer.clear()
+        self.listBuffer.clear()
+
+    def findFileDraw(self):
+        # Draw the document if not in fullscreen mode.
+        if not self.getSetting("fullscreen"):
+            self.defaultDraw()
+            print("", end="\n")
+        
+        # Set the height of the document and draw the prompt first if in fullscreen mode.
+        if self.getSetting("fullscreen"):
+            height = min(self.terminal.height - 2, self.listBuffer.numberOfLines)
+            self.printPrompt("Find file: ", self.findPromptBuffer, 0)
+            print("", end="\r\n")
+        else:
+            height = min(self.getSetting("maximumListHeight"), self.listBuffer.numberOfLines)
+
+        # Draw the search results.
+        self.print("workingDirectory", self.workingDirectory, end="\r\n")
+        if self.searchResults:
+            self.listBuffer.draw(self, height, 0, 0,
+                showLineNumbers=False, relativeLineNumbers=False,
+                showEmptyLineFill=False, showCursor=False,
+                activeCursor=False, highlightCurrentLine=True)
+        else:
+            self.print("lineNumber", "No results", end="\r")
+
+        # Draw the prompt last if not in fullscreen mode.
+        if not self.getSetting("fullscreen"):
+            print("", end="\r\n")
+            self.printPrompt("Find file: ", self.findPromptBuffer, self.terminal.height)
+
+    def fileName(self, path):
+        return self.getColor("directory") + path + "/" if os.path.isdir(os.path.join(self.workingDirectory, path)) else self.getColor("file") + path
+
+    def recursivelyFindFiles(self, path="", root=""):
+        if path != "":
+            for term in self.searchTerms:
+                if term in path:
+                    self.searchResults.append((self.fileName(os.path.join(root, path)), os.path.join(root, path)))
+
+        if os.path.isdir(os.path.join(self.workingDirectory, root, path)):
+            for subpath in os.listdir(os.path.join(self.workingDirectory, root, path)):
+                self.recursivelyFindFiles(subpath, root=os.path.join(root, path))
+
+    def findFileRefreshSearchResults(self):
+        if self.findPromptBuffer.currentLine.length == 1:
+            self.searchResults = []
+            self.currentSearchResultIndex = 0
+            self.recursivelyFindFiles()
+        elif self.findPromptBuffer.currentLine.hasText():
+            newResults = []
+            for result in self.searchResults:
+                for term in self.searchTerms:
+                    if term in result[1]:
+                        newResults.append(result)
+                        break
+            self.searchResults = newResults
+            self.currentSearchResultIndex = 0
+        else:
+            self.searchResults = [(self.getColor("directory") + "..", "..")]
+            for path in os.listdir(self.workingDirectory):
+                for term in self.searchTerms:
+                    if term in path:
+                        self.searchResults.append((self.fileName(path), path))
+                        break
+
+            if len(self.searchResults) > 1:
+                self.currentSearchResultIndex = 1
+            else:
+                self.currentSearchResultIndex = 0
+
+    def findFileChooseSearchResult(self):
+        if self.currentSearchResult[1] == "..":
+            self.workingDirectory = os.path.dirname(self.workingDirectory)
+            self.refreshSearchResults()
+            return
+
+        path = os.path.join(self.workingDirectory, self.currentSearchResult[1])
+        if os.path.isdir(path):
+            self.workingDirectory = path
+            self.findPromptBuffer.clear()
+            self.refreshSearchResults()
+        elif os.path.isfile(path):
+            self.openFile(path)
+            self.setMode("edit")()
+
+    def findFileNextSearchResult(self):
+        pass
+
+    def findFilePreviousSearchResult(self):
+        pass
+
+    def findFileOverlap(self):
+        if self.getSetting("fullscreen"):
+            return 0
+        else:
+            return max(1, min(self.listBuffer.numberOfLines, self.getSetting("maximumListHeight"))) + 2 + (1 if self.getSetting("showStatusLine") else 0)
+
+    def setMode(self, mode):
+        def process(key=None):
+            self.runAction("end")
+            self.mode = mode
+            self.runAction("begin")
+        return process
+
+    def refreshSearchResults(self, key=None):
+        # Populate the search results.
+        self.runAction("refreshSearchResults")
+        self.listBuffer.clear()
+        for result in self.searchResults:
+            self.listBuffer.insert(1, result[0])
+            self.listBuffer.insertLineBelow()
+
+        # Delete the extraneous newline.
+        if self.searchResults:
+            self.listBuffer.deleteLine()
+
+        # Resize the list buffer.
+        if self.getSetting("fullscreen"):
+            self.listBuffer.pageHeight = self.terminal.height
+        else:
+            self.listBuffer.pageHeight = min(len(self.searchResults), self.getSetting("maximumListHeight"))
+        # Position the cursor.
+        #self.currentSearchResultIndex = 0
+        self.listBuffer.cursorBufferStart()
+        self.listBuffer.cursorLineDown(self.currentSearchResultIndex)
+        self.redraw = True
+
+    def chooseSearchResult(self, key=None):
+        self.runAction("chooseSearchResult")
+
+    def nextSearchResult(self, key=None):
+        if self.currentSearchResultIndex < len(self.searchResults) - 1:
+            self.listBuffer.cursorLineDown()
+            self.currentSearchResultIndex += 1
+            self.redraw = True
+            self.runAction("nextSearchResult")
+
+    def previousSearchResult(self, key=None):
+        if self.currentSearchResultIndex > 0:
+            self.listBuffer.cursorLineUp()
+            self.currentSearchResultIndex -= 1
+            self.redraw = True
+            self.runAction("previousSearchResult")
+
+    def saveBuffer(self, key=None):
+        if self.currentBuffer.hasUnsavedChanges:
+            self.currentBuffer.write(self.workingDirectory + self.currentBuffer.name)
+            self.satusLine = f"{self.currentBuffer.name} saved."
+            self.redraw = True
+            self.clearStatusLine = True
+
+    def saveAllBuffers(self, key=None):
+        for buffer in self.buffers:
+            if buffer.hasUnsavedChanges:
+                buffer.write(self.workingDirectory + self.currentBuffer.name)
+                self.statusLine = "All buffers saved."
+                self.redraw = True
+                self.clearStatusLine = True
+
+    def killBuffer(self, key=None):
+        self.currentBuffer.clear()
+        if len(self.buffers) == 1:
+            self.currentBuffer.clear()
+            self.currentBuffer.name = untitledFileName(self.workingDirectory)
+        else:
+            del self.buffers[self.currentBufferIndex]
+            if self.currentBufferIndex == len(self.buffers):
+                self.currentBufferIndex -= 1
+        self.previousBufferIndex = self.currentBufferIndex
+        self.redraw = True
+
+    def closeBuffer(self, key=None):
+        if self.currentBuffer.hasUnsavedChanges:
+            self.statusLine = "This buffer has unsaved changes. Press Ctrl x to kill the buffer without saving."
+            self.redraw = True
+            self.clearStatusLine = True
+        else:
+            self.killBuffer(key)
+
+    def cursorCharacterRight(self, key=None):
+        self.redraw = self.inputBuffer.cursorY < self.inputBuffer.numberOfLines or self.inputBuffer.cursorX < self.inputBuffer.currentLine.length \
+            or self.inputBuffer.scrollY < self.inputBuffer.numberOfLines - 1
+        self.inputBuffer.cursorCharacterRight()
+
+    def cursorCharacterLeft(self, key=None):
+        self.redraw = self.inputBuffer.cursorY > 0 or self.inputBuffer.cursorX > 0
+        self.inputBuffer.cursorCharacterLeft()
+
+    def cursorLineUp(self, key=None):
+        self.inputBuffer.cursorLineUp()
+        self.redraw = self.inputBuffer.cursorY > 0 or self.inputBuffer.cursorX > 0
+
+    def cursorLineDown(self, key=None):
+        if self.mode == "findBuffer":
+            self.nextSearchResult()
+            self.currentBufferIndex = self.searchResults[self.listBuffer.cursorY][1]
+        else:
+            self.inputBuffer.cursorLineDown()
+            self.redraw = self.inputBuffer.cursorY < self.inputBuffer.numberOfLines or self.inputBuffer.cursorX < self.inputBuffer.currentLine.length \
+                or self.inputBuffer.scrollY < self.inputBuffer.numberOfLines - 1
+
+    def cursorLineStart(self, key=None):
+        self.redraw = self.inputBuffer.cursorX > 0 or self.inputBuffer.cursorY > 0
+        self.inputBuffer.cursorLineStart()
+
+    def cursorLineEnd(self, key=None):
+        self.redraw = self.inputBuffer.cursorX < self.inputBuffer.currentLine.length or self.inputBuffer.cursorY < self.inputBuffer.numberOfLines - 1
+        self.inputBuffer.cursorLineEnd()
+
+    def insertLineAbove(self, key=None):
+        self.inputBuffer.insertLineAbove()
+        self.redraw = True
+
+    def insertLineBelow(self, key=None):
+        self.inputBuffer.insertLineBelow()
+        self.redraw = True
+
+    def insertCharacter(self, key):
+        if key == "Space":
+            self.inputBuffer.insert(1, " ")
+        else:
+            self.inputBuffer.insert(1, key)
+
+        if self.inputBuffer is self.findPromptBuffer:
+            self.refreshSearchResults()
+        self.redraw = True
+
+    def delete(self, key=None):
+        self.inputBuffer.delete()
+        self.redraw = True
+
+    def deleteCharacterLeft(self, key=None):
+        self.inputBuffer.deleteCharacterLeft()
+        if self.inputBuffer is self.findPromptBuffer:
+            self.refreshSearchResults()
+        self.redraw = True
+
+    def deleteCharacterRight(self, key=None):
+        self.inputBuffer.deleteCharacterRight()
+        if self.inputBuffer is self.findPromptBuffer:
+            self.fillBufferList()
+        self.redraw = True
+
+    def deleteLine(self, key=None):
+        self.inputBuffer.deleteLine()
+        if self.inputBuffer is self.findPromptBuffer:
+            self.fillBufferList()
+        self.redraw = True
+
+    def quit(self, key=None):
+        for i, buffer in enumerate(self.buffers):
+            if buffer.hasUnsavedChanges:
+                self.statusLine = "A buffer has unsaved changes. Press Ctrl e to exit without saving."
+                self.redraw = True
+                self.clearStatusLine = True
+                return
+        self.keepRunning = False
+        
+    def exit(self, key=None):
+        self.keepRunning = False
+
+    def chooseBuffer(self, key=None):
+        self.setMode("edit")(key)
+        self.currentBufferIndex = self.searchResults[self.listBuffer.cursorY][1]
+        self.bufferIndexBeforeSearch = self.currentBufferIndex
+
+    def cancelBufferSearch(self, key=None):
+        self.currentBufferIndex = self.bufferIndexBeforeSearch
+        self.setMode("edit")(key)
 

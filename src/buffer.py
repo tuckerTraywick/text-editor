@@ -8,6 +8,7 @@ class Line:
         self.next = next
         self.text = text
 
+    @property
     def length(self):
         # Returns the length of the line.
         return len(self.text)
@@ -22,13 +23,13 @@ class Line:
 
     def insertText(self, pos, string):
         # Inserts `string` at position `pos` in the line.
-        assert pos <= self.length()
+        assert pos <= self.length
         self.text = self.text[:pos] + string + self.text[pos:]
 
     def deleteText(self, start, numberOfCharacters=1):
         # Deletes `numberOfCharacters` characters from the line starting at position `start`.
         assert start >= 0
-        assert start + numberOfCharacters <= self.length()
+        assert start + numberOfCharacters <= self.length
         self.text = self.text[:start] + self.text[start + numberOfCharacters:]
 
     def append(self, next):
@@ -67,12 +68,11 @@ class Buffer:
     # the cursor. The buffer can view one page of text at a time. The width and height of the page determine how many lines
     # the buffer can display at once and how long of a line the buffer can display, respectively. The buffer will scroll automatically 
     # when the cursor is moved out of the page, but it can also be scrolled manually.
-    def __init__(self, pageWidth, pageHeight, visualTabWidth, softTabWidth, index, name=""):
+    def __init__(self, pageWidth, pageHeight, visualTabWidth, softTabWidth, name=""):
         self.pageWidth = pageWidth
         self.pageHeight = pageHeight
         self.visualTabWidth = visualTabWidth
         self.softTabWidth = softTabWidth
-        self.index = 0
         self.name = name
         self.clear()
     
@@ -87,16 +87,26 @@ class Buffer:
 
     @property
     def position(self):
-        return f"({self.cursorY + 1}, {self.cursorX + 1})"
+        return (self.cursorY + 1, self.cursorX + 1)
 
     @property
     def fullName(self):
-        return self.name + " " + self.position + self.status
+        return f"{self.name} {self.position}{self.status}"
+
+    def clear(self):
+        # Wipes the buffer and resets it.
+        self.isReadOnly = False
+        self.hasUnsavedChanges = False
+        self.scrollX = self.scrollY = 0
+        self.cursorX = self.cursorY = self.maxCursorX = 0
+        self.markerX = self.markerY = -1
+        self.numberOfLines = 1
+        self.firstLine = self.lastLine = self.topLine = self.currentLine = Line()
 
     def draw(self, editor, height, x, y, showLineNumbers=True, relativeLineNumbers=False, showEmptyLineFill=True, showCursor=True, activeCursor=True, highlightCurrentLine=True):
         currentLine = self.topLine
         gutterWidth = max(editor.getSetting("minimumGutterWidth"), len(str(self.numberOfLines)))
-        lineWidth = self.pageWidth - gutterWidth - x - 1 if showLineNumbers else self.pageWidth - x
+        lineWidth = editor.terminal.width - gutterWidth - x - 1 if showLineNumbers else self.pageWidth - x
         for i in range(height):
             # If the loop hasn't gone past the last line, print the current line number and line. Else, print the empty line fill if necessary.
             if currentLine is not None:
@@ -133,18 +143,8 @@ class Buffer:
         # Draw the cursor if necessary.
         if showCursor:
             with editor.terminal.location(x + (self.cursorX + gutterWidth + 1 if showLineNumbers else self.cursorX), y + self.cursorY - self.scrollY):
-                character = self.currentLine.text[self.cursorX] if self.cursorX < self.currentLine.length() else " "
+                character = self.currentLine.text[self.cursorX] if self.cursorX < self.currentLine.length else " "
                 editor.print("activeCursor" if activeCursor else "inactiveCursor", character, end="")
-
-    def clear(self):
-        # Wipes the buffer and resets it.
-        self.isReadOnly = False
-        self.hasUnsavedChanges = False
-        self.scrollX = self.scrollY = 0
-        self.cursorX = self.cursorY = self.maxCursorX = 0
-        self.markerX = self.markerY = -1
-        self.numberOfLines = 1
-        self.firstLine = self.lastLine = self.topLine = self.currentLine = Line()
 
     def open(self, filePath, readOnly=False):
         # Opens the given file and reads it into the buffer. Closes the buffer first.
@@ -205,7 +205,7 @@ class Buffer:
             if self.cursorY > 0:
                 self.currentLine = self.currentLine.previous
                 self.cursorY -= 1
-                self.cursorX = min(self.cursorX, self.currentLine.length())
+                self.cursorX = min(self.cursorX, self.currentLine.length)
                 if self.cursorY < self.scrollY:
                     self.scrollLineUp()
             elif self.cursorX > 0:
@@ -218,11 +218,11 @@ class Buffer:
             if self.cursorY < self.numberOfLines - 1:
                 self.currentLine = self.currentLine.next
                 self.cursorY += 1
-                self.cursorX = min(self.cursorX, self.currentLine.length())
+                self.cursorX = min(self.cursorX, self.currentLine.length)
                 if self.cursorY > self.scrollY + self.pageHeight - 1:
                     self.scrollLineDown()
-            elif self.cursorX < self.currentLine.length():
-                self.cursorX = self.currentLine.length()
+            elif self.cursorX < self.currentLine.length:
+                self.cursorX = self.currentLine.length
             elif self.scrollY < self.numberOfLines - 1:
                 self.scrollLineDown()
             else:
@@ -234,13 +234,13 @@ class Buffer:
                 self.cursorX -= 1
             elif self.cursorY > 0:
                 self.cursorLineUp()
-                self.cursorX = self.currentLine.length()
+                self.cursorX = self.currentLine.length
             else:
                 break
 
     def cursorCharacterRight(self, amount=1):
         for i in range(amount):
-            if self.cursorX < self.currentLine.length():
+            if self.cursorX < self.currentLine.length:
                 self.cursorX += 1
             elif self.cursorY < self.numberOfLines - 1:
                 self.cursorLineDown()
@@ -262,11 +262,11 @@ class Buffer:
 
     def cursorLineEnd(self, amount=1):
         for i in range(amount):
-            if self.cursorX < self.currentLine.length():
-                self.cursorX = self.currentLine.length()
+            if self.cursorX < self.currentLine.length:
+                self.cursorX = self.currentLine.length
             elif self.cursorY < self.numberOfLines - 1:
                 self.cursorLineDown()
-                self.cursorX = self.currentLine.length()
+                self.cursorX = self.currentLine.length
             else:
                 break
 
@@ -312,7 +312,7 @@ class Buffer:
 
     def deleteCharacterRight(self, amount=1):
         for i in range(amount):
-            if self.cursorX < self.currentLine.length():
+            if self.cursorX < self.currentLine.length:
                 self.currentLine.deleteText(self.cursorX, 1)
             elif self.cursorY < self.numberOfLines - 1:
                 self.currentLine.text += self.currentLine.next.text

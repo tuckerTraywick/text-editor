@@ -6,19 +6,54 @@ from editor import Editor
 if __name__ == "__main__":
     editor = Editor()
 
-    editor.setSettings({
+    editor.addMode("homeMenu", {
+        "draw": editor.homeMenuDraw,
+    })
+    editor.addMode("edit", {
+        "begin": editor.editBegin,
+        "end": editor.editEnd,
+    })
+    editor.addMode("findBuffer", {
+        "begin": editor.findBufferBegin,
+        "end": editor.findBufferEnd,
+        "draw": editor.findBufferDraw,
+        "refreshSearchResults": editor.findBufferRefreshSearchResults,
+        "chooseSearchResult": editor.findBufferChooseSearchResult,
+        "nextSearchResult": editor.findBufferNextSearchResult,
+        "previousSearchResult": editor.findBufferPreviousSearchResult,
+        "overlap": editor.findBufferOverlap,
+    })
+    editor.addMode("findFile", {
+        "begin": editor.findFileBegin,
+        "end": editor.findFileEnd,
+        "draw": editor.findFileDraw,
+        "refreshSearchResults": editor.findFileRefreshSearchResults,
+        "chooseSearchResult": editor.findFileChooseSearchResult,
+        "nextSearchResult": editor.findFileNextSearchResult,
+        "previousSearchResult": editor.findFilePreviousSearchResult,
+        "overlap": editor.findFileOverlap,
+    })
+
+    editor.setSettings("all", {
+        "defaultMode": "edit",
         "showLineNumbers": True,
         "relativeLineNumbers": False,
         "showStatusLine": True,
     })
+    editor.setSettings(["findBuffer", "findFile"], {
+        "fullscreen": False,
+    })
 
-    editor.setColors({
+    editor.setColors("all", {
         "lineNumber": editor.terminal.gray40,
         "emptyLineFill": editor.terminal.gray40,
         "currentLine": editor.terminal.on_gray17,
         "currentSelection": editor.terminal.normal,
         "statusLine": editor.terminal.on_gray22,
         "inactiveCursor": editor.terminal.on_slategray,
+        "file": editor.terminal.default,
+        "directory": editor.terminal.lightsteelblue2,
+        "workingDirectory": editor.terminal.italic_gray60,
     })
 
     leader = "Space"
@@ -29,25 +64,25 @@ if __name__ == "__main__":
     editor.addKeybinding(["edit"], ["Ctrl c", f"Alt {leader} c"], editor.closeBuffer)
     editor.addKeybinding(["edit"], ["Ctrl x", f"Alt {leader} x"], editor.killBuffer)
     editor.addKeybinding("!findBuffer", ["Ctrl b", f"Alt {leader} b"], editor.setMode("findBuffer"))
+    editor.addKeybinding("!findFile", ["Ctrl f", f"Alt {leader} f"], editor.setMode("findFile"))
 
-    editor.addKeybinding(["edit"], ["Printable", "Space"], editor.insertCharacter)
+    editor.addKeybinding(["edit", "findBuffer", "findFile"], ["Printable", "Space"], editor.insertCharacter)
     editor.addKeybinding(["edit"], ["Up", "Alt i"], editor.cursorLineUp)
     editor.addKeybinding(["edit"], ["Down", "Alt k"], editor.cursorLineDown)
     editor.addKeybinding(["edit"], ["Alt a"], editor.insertLineAbove)
     editor.addKeybinding(["edit"], ["Alt b"], editor.insertLineBelow)
-    editor.addKeybinding(["edit", "findBuffer"], ["Left", "Alt j"], editor.cursorCharacterLeft)
-    editor.addKeybinding(["edit", "findBuffer"], ["Right", "Alt l"], editor.cursorCharacterRight)
-    editor.addKeybinding(["edit", "findBuffer"], ["Alt s"], editor.cursorLineStart)
-    editor.addKeybinding(["edit", "findBuffer"], ["Alt e"], editor.cursorLineEnd)
-    editor.addKeybinding(["edit", "findBuffer"], ["Backspace"], editor.deleteCharacterLeft)
-    editor.addKeybinding(["edit", "findBuffer"], ["Delete", "Alt d"], editor.deleteCharacterRight)
-    editor.addKeybinding(["edit", "findBuffer"], ["Alt D"], editor.deleteLine)
+    editor.addKeybinding(["edit", "findBuffer", "findFile"], ["Left", "Alt j"], editor.cursorCharacterLeft)
+    editor.addKeybinding(["edit", "findBuffer", "findFile"], ["Right", "Alt l"], editor.cursorCharacterRight)
+    editor.addKeybinding(["edit", "findBuffer", "findFile"], ["Alt s"], editor.cursorLineStart)
+    editor.addKeybinding(["edit", "findBuffer", "findFile"], ["Alt e"], editor.cursorLineEnd)
+    editor.addKeybinding(["edit", "findBuffer", "findFile"], ["Backspace"], editor.deleteCharacterLeft)
+    editor.addKeybinding(["edit", "findBuffer", "findFile"], ["Delete", "Alt d"], editor.deleteCharacterRight)
+    editor.addKeybinding(["edit", "findBuffer", "findFile"], ["Alt D"], editor.deleteLine)
 
-    editor.addKeybinding(["findBuffer"], ["Printable", "Space"], editor.insertCharacter)
-    editor.addKeybinding(["findBuffer"], ["Up", "Alt i"], editor.bufferBackward)
-    editor.addKeybinding(["findBuffer"], ["Down", "Alt k"], editor.bufferForward)
-    editor.addKeybinding(["findBuffer"], ["Enter"], editor.chooseBuffer)
-    editor.addKeybinding(["findBuffer"], ["Alt q"], editor.cancelBufferSearch)
+    editor.addKeybinding(["findBuffer", "findFile"], ["Up", "Alt i"], editor.previousSearchResult)
+    editor.addKeybinding(["findBuffer", "findFile"], ["Down", "Alt k"], editor.nextSearchResult)
+    editor.addKeybinding(["findBuffer", "findFile"], ["Enter"], editor.chooseSearchResult)
+    editor.addKeybinding(["findBuffer", "findFile"], ["Alt q"], editor.setMode("edit"))
 
     if len(sys.argv) > 1:
         editor.run(sys.argv[1:])
