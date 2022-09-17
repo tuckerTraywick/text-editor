@@ -22,6 +22,7 @@ if __name__ == "__main__":
         "nextSearchResult": editor.findBufferNextSearchResult,
         "previousSearchResult": editor.findBufferPreviousSearchResult,
         "overlap": editor.findBufferOverlap,
+        "highlight": editor.highlightMatches,
     })
     editor.addMode("findFile", {
         "begin": editor.findFileBegin,
@@ -32,6 +33,7 @@ if __name__ == "__main__":
         "nextSearchResult": editor.findFileNextSearchResult,
         "previousSearchResult": editor.findFilePreviousSearchResult,
         "overlap": editor.findFileOverlap,
+        "highlight": editor.highlightMatches,
     })
 
     editor.setSettings("all", {
@@ -54,6 +56,7 @@ if __name__ == "__main__":
         "file": editor.terminal.default,
         "directory": editor.terminal.lightsteelblue2,
         "workingDirectory": editor.terminal.italic_gray60,
+        "match": editor.terminal.khaki3,
     })
 
     leader = "Space"

@@ -1,4 +1,5 @@
 import os
+import pathlib
 import blessed
 from buffer import Buffer
 
@@ -40,6 +41,7 @@ class Editor:
                 "file": self.terminal.normal,
                 "workingDirectory": self.terminal.italic,
                 "directory": self.terminal.normal,
+                "match": self.terminal.reverse_bright,
             },
         }
         self.keybindings = {"all": {},}
@@ -108,6 +110,7 @@ class Editor:
             "draw": self.defaultDraw,
             "drawStatusLine": self.defaultDrawStatusLine,
             "overlap": self.defaultOverlap,
+            "highlight": self.defaultHighlight,
             "refreshSearchResults": None,
             "chooseSearchResult": None,
             "nextSearchResult": None,
@@ -172,6 +175,9 @@ class Editor:
             if color in self.colors[mode]:
                 del self.colors[mode][color]
 
+    def highlight(self, text, normal=""):
+        return self.actions[self.mode]["highlight"](text, normal)
+
     def addKeybinding(self, modes, sequence, action):
         if isinstance(modes, list):
             for mode in modes:
@@ -231,7 +237,22 @@ class Editor:
         buffer.draw(self, 1, len(text), y,
             showLineNumbers=False, relativeLineNumbers=False,
             showEmptyLineFill=False, showCursor=True,
-            activeCursor=True, highlightCurrentLine=False)
+            activeCursor=True, highlightCurrentLine=False,
+            highlighting=False)
+
+    def highlightMatches(self, string, normal):
+        result = ""
+        i = 0
+        while i < len(string):
+            for term in self.searchTerms:
+                if term and string.startswith(term, i):
+                    result += self.getColor("match") + term + normal
+                    i += len(term)
+                    break
+            else:
+                result += string[i]
+                i += 1
+        return result
 
     def newBuffer(self, name=None):
         if name is None:
@@ -376,6 +397,9 @@ class Editor:
     def defaultOverlap(self):
         return 1 if self.getSetting("showStatusLine") else 0
 
+    def defaultHighlight(self, line, normal=""):
+        return line
+
     def homeMenuDraw(self):
         self.print("default", self.terminal.center("Text Editor"))
 
@@ -483,10 +507,10 @@ class Editor:
             height = min(self.getSetting("maximumListHeight"), self.listBuffer.numberOfLines)
 
         # Draw the search results.
-        self.print("workingDirectory", self.workingDirectory, end="\r\n")
+        self.print("workingDirectory", f"{self.fileName(self.workingDirectory)} [{len(self.searchResults)}]", end="\r\n")
         if self.searchResults:
             self.listBuffer.draw(self, height, 0, 0,
-                showLineNumbers=False, relativeLineNumbers=False,
+                showLineNumbers=True, relativeLineNumbers=False,
                 showEmptyLineFill=False, showCursor=False,
                 activeCursor=False, highlightCurrentLine=True)
         else:
@@ -498,34 +522,35 @@ class Editor:
             self.printPrompt("Find file: ", self.findPromptBuffer, self.terminal.height)
 
     def fileName(self, path):
-        return self.getColor("directory") + path + "/" if os.path.isdir(os.path.join(self.workingDirectory, path)) else self.getColor("file") + path
+        return path + "/" if os.path.isdir(os.path.join(self.workingDirectory, path)) and path != "/" else path
+
+    def upDirectory(self, path, amount=1):
+        head, tail = os.path.split(path)
+        for i in range(amount):
+            split = os.path.split(head)
+            head = split[0]
+            tail = os.path.join(split[1], tail)
+        return tail
 
     def recursivelyFindFiles(self, path="", root=""):
         if path != "":
             for term in self.searchTerms:
-                if term in path:
+                if term in self.upDirectory(os.path.join(root, path), term.count("/")):
                     self.searchResults.append((self.fileName(os.path.join(root, path)), os.path.join(root, path)))
+                    break
 
         if os.path.isdir(os.path.join(self.workingDirectory, root, path)):
             for subpath in os.listdir(os.path.join(self.workingDirectory, root, path)):
-                self.recursivelyFindFiles(subpath, root=os.path.join(root, path))
+                self.recursivelyFindFiles(subpath, os.path.join(root, path))
 
     def findFileRefreshSearchResults(self):
-        if self.findPromptBuffer.currentLine.length == 1:
+        if self.findPromptBuffer.currentLine.hasText():
             self.searchResults = []
+            self.listBuffer.clear()
             self.currentSearchResultIndex = 0
             self.recursivelyFindFiles()
-        elif self.findPromptBuffer.currentLine.hasText():
-            newResults = []
-            for result in self.searchResults:
-                for term in self.searchTerms:
-                    if term in result[1]:
-                        newResults.append(result)
-                        break
-            self.searchResults = newResults
-            self.currentSearchResultIndex = 0
         else:
-            self.searchResults = [(self.getColor("directory") + "..", "..")]
+            self.searchResults = [("..", "..")]
             for path in os.listdir(self.workingDirectory):
                 for term in self.searchTerms:
                     if term in path:
@@ -589,7 +614,6 @@ class Editor:
         else:
             self.listBuffer.pageHeight = min(len(self.searchResults), self.getSetting("maximumListHeight"))
         # Position the cursor.
-        #self.currentSearchResultIndex = 0
         self.listBuffer.cursorBufferStart()
         self.listBuffer.cursorLineDown(self.currentSearchResultIndex)
         self.redraw = True

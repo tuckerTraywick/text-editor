@@ -103,10 +103,10 @@ class Buffer:
         self.numberOfLines = 1
         self.firstLine = self.lastLine = self.topLine = self.currentLine = Line()
 
-    def draw(self, editor, height, x, y, showLineNumbers=True, relativeLineNumbers=False, showEmptyLineFill=True, showCursor=True, activeCursor=True, highlightCurrentLine=True):
+    def draw(self, editor, height, x, y, showLineNumbers=True, relativeLineNumbers=False, showEmptyLineFill=True, showCursor=True, activeCursor=True, highlightCurrentLine=True, highlighting=True):
         currentLine = self.topLine
         gutterWidth = max(editor.getSetting("minimumGutterWidth"), len(str(self.numberOfLines)))
-        lineWidth = editor.terminal.width - gutterWidth - x - 1 if showLineNumbers else self.pageWidth - x
+        lineWidth = editor.terminal.width - gutterWidth - x - 1 if showLineNumbers else editor.terminal.width - x
         for i in range(height):
             # If the loop hasn't gone past the last line, print the current line number and line. Else, print the empty line fill if necessary.
             if currentLine is not None:
@@ -129,7 +129,10 @@ class Buffer:
                         editor.print("lineNumber", f"{self.scrollY + i + 1:>{gutterWidth}} ", end="")
                 
                 # Print the current line.
-                editor.print("default", (editor.getColor("currentLine") if highlightCurrentLine and currentLine is self.currentLine else "") + currentLine.text.ljust(lineWidth), end="\r")
+                line = currentLine.text.ljust(lineWidth) 
+                if highlighting:
+                    line = editor.highlight(line, editor.getColor("default") + editor.getColor("currentLine") if highlightCurrentLine and currentLine is self.currentLine else editor.getColor("default"))
+                editor.print("currentLine" if highlightCurrentLine and currentLine is self.currentLine else "default", line, end="\r")
                 currentLine = currentLine.next
             elif showEmptyLineFill:
                 editor.print("emptyLineFill", editor.getSetting("emptyLineFill"), end="\r")
