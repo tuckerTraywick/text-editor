@@ -19,7 +19,9 @@ class Editor:
                 "showLineNumbers": True,
                 "relativeLineNumbers": False,
                 "showEmptyLineFill": True,
+                "showTabList": True,
                 "showStatusLine": True,
+                "alwaysShowCommandLine": True,
                 "syntaxHighlighting": False,
                 "highlightCurrentLineNumber": True,
                 "highlightCurrentLine": True,
@@ -33,7 +35,10 @@ class Editor:
                 "currentLine": self.terminal.normal,
                 "currentSelection": self.terminal.reverse,
                 "emptyLineFill": self.terminal.normal,
+                "tabList": self.terminal.reverse,
+                "currentTab": self.terminal.bold,
                 "statusLine": self.terminal.reverse,
+                "commandLine": self.terminal.normal,
                 "prompt": self.terminal.bold,
                 "input": self.terminal.normal,
                 "activeCursor": self.terminal.reverse,
@@ -41,7 +46,7 @@ class Editor:
                 "file": self.terminal.normal,
                 "workingDirectory": self.terminal.italic,
                 "directory": self.terminal.normal,
-                "match": self.terminal.reverse_bright,
+                "match": self.terminal.reverse,
             },
         }
         self.keybindings = {"all": {},}
@@ -108,7 +113,9 @@ class Editor:
             "begin": self.defaultBegin,
             "end": self.defaultEnd,
             "draw": self.defaultDraw,
+            "drawTabList": self.defaultDrawTabList,
             "drawStatusLine": self.defaultDrawStatusLine,
+            "drawCommandLine": self.defaultDrawCommandLine,
             "overlap": self.defaultOverlap,
             "highlight": self.defaultHighlight,
             "refreshSearchResults": None,
@@ -357,12 +364,12 @@ class Editor:
         self.setup()
         for path in filePaths:
             self.open(path)
-        self.openFile("notes.txt")
+        #self.openFile("notes.txt")
         self.openFile("example.txt")
         self.switchToBuffer(0)
         self.runAction("begin")
 
-        with self.terminal.raw(), self.terminal.keypad(), self.terminal.hidden_cursor():
+        with self.terminal.fullscreen(), self.terminal.raw(), self.terminal.keypad(), self.terminal.hidden_cursor():
             while self.keepRunning:
                 self.draw()
                 self.update()
@@ -375,8 +382,13 @@ class Editor:
         pass
 
     def defaultDraw(self):
+        # Draw the tab list.
+        if self.getSetting("showTabList"):
+            self.runAction("drawTabList")
+            print("", end="\r\n")
+
         # Draw the current buffer.
-        self.displayBuffer.draw(self, self.documentHeight, 0, 0,
+        self.displayBuffer.draw(self, self.documentHeight, 0, int(self.getSetting("showTabList")),
             showLineNumbers=self.getSetting("showLineNumbers"), relativeLineNumbers=self.getSetting("relativeLineNumbers"),
             showEmptyLineFill=self.getSetting("showEmptyLineFill"), showCursor=True,
             activeCursor=self.mode == "edit", highlightCurrentLine=True)
@@ -386,16 +398,30 @@ class Editor:
             print("", end="\n")
             self.runAction("drawStatusLine")
 
+        # Draw the command line.
+        if self.getSetting("alwaysShowCommandLine"):
+            print("", end="\n")
+            self.runAction("drawCommandLine")
+            print("", end="\r")
+
+    def defaultDrawTabList(self):
+        for i, buffer in enumerate(self.buffers):
+            self.print("currentTab" if i == self.currentBufferIndex else "tabList", f" {i+1} {os.path.basename(buffer.name) + buffer.status} ", end="")
+        self.print("tabList", " "*(self.terminal.width - self.terminal.get_location()[1]), end="")
+
     def defaultDrawStatusLine(self):
         if self.statusLine:
             self.print("statusLine", self.terminal.ljust(self.statusLine), end="\r")
         elif self.currentKeySequence:
             self.print("statusLine", self.terminal.ljust(self.currentKeySequence), end="\r")
         else:
-            self.print("statusLine", self.terminal.ljust(self.currentBuffer.fullName + " | " + self.mode), end="\r")
+            self.print("statusLine", self.terminal.ljust(self.currentBuffer.fullName), end="\r")
+
+    def defaultDrawCommandLine(self):
+        self.print("commandLine", "command text here", end="")
 
     def defaultOverlap(self):
-        return 1 if self.getSetting("showStatusLine") else 0
+        return int(self.getSetting("alwaysShowCommandLine")) + int(self.getSetting("showStatusLine")) + int(self.getSetting("showTabList"))
 
     def defaultHighlight(self, line, normal=""):
         return line
@@ -501,7 +527,7 @@ class Editor:
         # Set the height of the document and draw the prompt first if in fullscreen mode.
         if self.getSetting("fullscreen"):
             height = min(self.terminal.height - 2, self.listBuffer.numberOfLines)
-            self.printPrompt("Find file: ", self.findPromptBuffer, 0)
+            self.printPrompt("Open file: ", self.findPromptBuffer, 0)
             print("", end="\r\n")
         else:
             height = min(self.getSetting("maximumListHeight"), self.listBuffer.numberOfLines)
@@ -519,7 +545,7 @@ class Editor:
         # Draw the prompt last if not in fullscreen mode.
         if not self.getSetting("fullscreen"):
             print("", end="\r\n")
-            self.printPrompt("Find file: ", self.findPromptBuffer, self.terminal.height)
+            self.printPrompt("Open file: ", self.findPromptBuffer, self.terminal.height)
 
     def fileName(self, path):
         return path + "/" if os.path.isdir(os.path.join(self.workingDirectory, path)) and path != "/" else path
@@ -620,6 +646,11 @@ class Editor:
 
     def chooseSearchResult(self, key=None):
         self.runAction("chooseSearchResult")
+
+    def copySearchResult(self, key=None):
+        self.findPromptBuffer.clear()
+        self.findPromptBuffer.insert(1, self.currentSearchResult[0])
+        self.refreshSearchResults()
 
     def nextSearchResult(self, key=None):
         if self.currentSearchResultIndex < len(self.searchResults) - 1:
@@ -731,13 +762,13 @@ class Editor:
     def deleteCharacterRight(self, key=None):
         self.inputBuffer.deleteCharacterRight()
         if self.inputBuffer is self.findPromptBuffer:
-            self.fillBufferList()
+            self.refreshSearchResults()
         self.redraw = True
 
     def deleteLine(self, key=None):
         self.inputBuffer.deleteLine()
         if self.inputBuffer is self.findPromptBuffer:
-            self.fillBufferList()
+            self.refreshSearchResults()
         self.redraw = True
 
     def quit(self, key=None):

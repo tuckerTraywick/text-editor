@@ -52,6 +52,8 @@ if __name__ == "__main__":
         "currentLine": editor.terminal.on_gray17,
         "currentSelection": editor.terminal.normal,
         "statusLine": editor.terminal.on_gray22,
+        "tabList": editor.terminal.gray60_on_gray22,
+        "currentTab": editor.terminal.bold,
         "inactiveCursor": editor.terminal.on_slategray,
         "file": editor.terminal.default,
         "directory": editor.terminal.lightsteelblue2,
@@ -66,8 +68,8 @@ if __name__ == "__main__":
     editor.addKeybinding(["edit"], ["Ctrl a", f"Alt {leader} a"], editor.saveAllBuffers)
     editor.addKeybinding(["edit"], ["Ctrl c", f"Alt {leader} c"], editor.closeBuffer)
     editor.addKeybinding(["edit"], ["Ctrl x", f"Alt {leader} x"], editor.killBuffer)
-    editor.addKeybinding("!findBuffer", ["Ctrl b", f"Alt {leader} b"], editor.setMode("findBuffer"))
-    editor.addKeybinding("!findFile", ["Ctrl f", f"Alt {leader} f"], editor.setMode("findFile"))
+    editor.addKeybinding("!findBuffer", ["Ctrl f", f"Alt {leader} f"], editor.setMode("findBuffer"))
+    editor.addKeybinding("!findFile", ["Ctrl o", f"Alt {leader} o"], editor.setMode("findFile"))
 
     editor.addKeybinding(["edit", "findBuffer", "findFile"], ["Printable", "Space"], editor.insertCharacter)
     editor.addKeybinding(["edit"], ["Up", "Alt i"], editor.cursorLineUp)
@@ -85,6 +87,7 @@ if __name__ == "__main__":
     editor.addKeybinding(["findBuffer", "findFile"], ["Up", "Alt i"], editor.previousSearchResult)
     editor.addKeybinding(["findBuffer", "findFile"], ["Down", "Alt k"], editor.nextSearchResult)
     editor.addKeybinding(["findBuffer", "findFile"], ["Enter"], editor.chooseSearchResult)
+    editor.addKeybinding(["findBuffer", "findFile"], ["Tab"], editor.copySearchResult)
     editor.addKeybinding(["findBuffer", "findFile"], ["Alt q"], editor.setMode("edit"))
 
     if len(sys.argv) > 1:

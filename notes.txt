@@ -1,7 +1,144 @@
-this is a note
-this is another note
+Node<T>
+    next Node<T>
+    previous Node<T>
+    data T
 
 
-this is the third note
+LinkedList<T>
+    firstNode Node<T>
+    lastNode Node<T>
+    length usize
 
-goodbye now
+
+Piece
+    isOriginal bool
+    startIndex usize
+    length usize
+
+
+PieceTable
+    originalText string
+    appendText string
+    pieces LinkedList<Piece>
+    
+    .numberOfPieces(self)
+    getText(self, piece Piece) string
+    clear(self)
+    readFromFile(self, file File)
+    writeToFile(self, file File)
+    insert(self, text, position Mark)
+    delete(self, range Selection)
+
+
+Mark
+    _piece Node<Piece>
+    index usize
+    
+    .piece(self)
+
+
+Selection
+    start Mark
+    end Mark
+
+
+Buffer
+    name string
+    isReadonly bool
+    hasUnsavedChanges bool
+    isSelecting bool
+    pieceTable PieceTable
+    selections LinkedList<Selection>
+    _activeSelection Node<Selection>
+    pageStart Mark
+    startLineNumber
+    currentLineNumber
+    numberOfLines
+    
+    .activeSelection(self)
+    clear(self)
+    readFromFile(self, file File)
+    writeToFile(self, file File)
+    startSelecting(self)
+    stopSelecting(self)
+    insert(self, amount, text)
+    delete(self)
+    cursorCharacterLeft(self, amount)
+    cursorCharacterRight(self, amount)
+    cursorWordLeft(self, amount)
+    cursorWordRight(self, amount)
+    cursorWordEnd(self, amount)
+    cursorWORDLeft(self, amount)
+    cursorWORDRight(self, amount)
+    cursorWORDEnd(self, amount)
+    cursorLineBegin(self, amount)
+    cursorLineEnd(self, amount)
+    cursorLineUp(self, amount)
+    cursorLineDown(self, amount)
+
+
+View
+    parent
+    children
+    
+    .width(self)
+    .width=(self, width)
+    .height(self)
+    .height=(self, height)
+    .hasParent(self)
+    .hasChildren(self)
+    draw(self, x, y, maximumWidth, maximumHeight)
+
+
+HorizontalView(View)
+
+
+VerticalView(View)
+
+
+TabView(View)
+
+
+BufferView(View)
+    buffer
+    highlighter
+    filetype
+    language
+    _width
+    _height
+    
+    draw(self, x, y, maximumWidth, maximumHeight, showLineNumbers, relativeLineNumbers, ...)
+
+
+TerminalView(View)
+    _width
+    _height
+
+
+DirectoryView(View)
+    rootDirectories
+
+
+HomeMenuView(View)
+
+
+Editor
+    terminal
+    settings
+    colors
+    keybindings
+    actions
+    mode
+    workingDirectory
+    currentKeybindings
+    currentGlobalKeybindings
+    currentKeySequence
+    commandBar
+    rootView
+    currentView
+    previousView
+    buffers
+    keepRunning
+    redraw
+    clearCommandBar
+
