@@ -4,6 +4,376 @@ import blessed
 from buffer import Buffer
 
 
+class VerticalSplitView:
+    def __init__(self, children, parent=None):
+        self.children = children
+        self.parent = parent
+
+    @property
+    def name(self):
+        return f"({len(self.children)}) {self.children[0].name}"
+
+    @property
+    def hasTabs(self):
+        return any(child.hasTabs for child in self.children)
+
+    def drawVerticalLine(self, editor, x, y, height):
+        border = editor.getSetting("verticalBorder")
+        for i in range(y, y + height):
+            editor.print("verticalBorder", border, x, i, width=len(border), height=1, end="")
+
+    def drawHorizontalLine(self, editor, x, y, width):
+        editor.print("tabName", " "*width, x, y, width, 1, end="")
+
+    def draw(self, editor, x, y, width, height):
+        childWidth = width//len(self.children)
+        for i, child in enumerate(self.children[:-1]):
+            if self.hasTabs and editor.getSetting("showTabList") and not isinstance(child, TabView):
+                childY = y + 1
+                childHeight = height - 1
+                self.drawHorizontalLine(editor, x, y, childWidth)
+            else:
+                childY = y
+                childHeight = height
+            child.draw(editor, x + childWidth*i, childY, childWidth - 1, childHeight)
+            self.drawVerticalLine(editor, x + childWidth*(i + 1) - 1, childY, childHeight)
+
+        if self.hasTabs and editor.getSetting("showTabList") and not isinstance(self.children[-1], TabView):
+            childY = y + 1
+            childHeight = height - 1
+            self.drawHorizontalLine(editor, x + childWidth*(len(self.children) - 1), y, width - childWidth*(len(self.children) - 1))
+        else:
+            childY = y
+            childHeight = height
+        self.children[-1].draw(editor, x + childWidth*(len(self.children) - 1), childY, width - childWidth*(len(self.children) - 1), childHeight)
+
+
+class HorizontalSplitView:
+    def __init__(self, children, parent=None):
+        self.children = children
+        self.parent = parent
+
+    @property
+    def name(self):
+        return f"({len(self.children)}){self.children[0].name}"
+
+    @property
+    def hasTabs(self):
+        return any(child.hasTabs for child in self.children)
+
+    def draw(self, editor, x, y, width, height):
+        childHeight = height//len(self.children)
+        for i, child in enumerate(self.children[:-1]):
+            child.draw(editor, x, y + childHeight*i, width, childHeight)
+        self.children[-1].draw(editor, x, y + childHeight*(len(self.children) - 1), width, height - childHeight*(len(self.children) - 1))
+
+
+class TabView:
+    def __init__(self, children, parent=None):
+        self.children = children
+        self.parent = parent
+        self.currentTab = 0
+
+    @property
+    def name(self):
+        return f"({len(self.children)}){self.children[0].name}"
+
+    @property
+    def hasTabs(self):
+        return True
+
+    def draw(self, editor, x, y, width, height):
+        if editor.getSetting("showTabList"):
+            tabLine = ""
+            length = 0
+            for i, child in enumerate(self.children):
+                tab = f" {i+1} {child.name} "
+                if i == self.currentTab:
+                    tabLine += editor.format("currentTabName", tab) + editor.terminal.normal
+                else:
+                    tabLine += editor.format("tabName", tab) + editor.terminal.normal
+                length += len(tab)
+            editor.print("", tabLine, x, y, width, 1)
+            editor.print("tabName", " "*(width - length), x + length, y, width, 1)
+
+        self.children[self.currentTab].draw(editor, x, y + 1, width, height - 1)
+
+
+class BufferView:
+    def __init__(self, buffer, isActive=False, parent=None):
+        self.buffer = buffer
+        self.isActive = isActive
+        self.parent = parent
+
+    @property
+    def name(self):
+        return self.buffer.name
+
+    @property
+    def hasTabs(self):
+        return False
+
+    @property
+    def statusLine(self):
+        if self.buffer.hasUnsavedChanges:
+            line = "[+] "
+        elif self.buffer.isReadonly:
+            line = "[ro] "
+        else:
+            line = ""
+        return line + f"{self.buffer.name} {(self.buffer.cursorY, self.buffer.cursorX)}"
+
+    def draw(self, editor, x, y, width, height):
+        gutterWidth = max(editor.getSetting("minimumGutterWidth"), len(str(self.buffer.numberOfLines)))
+        originalY = y
+
+        # Draw the lines and line numbers.
+        for i, line in enumerate(self.buffer.lines):
+            if height <= 1:
+                break
+            editor.print("currentLine", (editor.format("lineNumber", f"{i:>{gutterWidth}} ") if editor.getSetting("showLineNumbers") else "") + line, x, y, width, height, end="")
+            y += 1
+            height -= 1
+
+        # Draw the empty lines.
+        while height > 1:
+            editor.print("emptyLineFill", editor.getSetting("emptyLineFill"), x, y, width, height, end="")
+            y += 1
+            height -= 1
+
+        # Draw the statusline.
+        editor.print("currentStatusLine" if self.isActive else "statusLine", self.statusLine.ljust(width), x, y, width, height, end="")
+
+        # Draw the cursor.
+        editor.print("activeCursor" if self.isActive else "inactiveCursor", self.buffer.currentCharacter or " ", x + gutterWidth + 1 + self.buffer.cursorX, originalY + self.buffer.cursorY, 1, 1, end="")
+
+
+class Editor:
+    def __init__(self):
+        self.terminal = blessed.Terminal()
+        self.settings = {
+            "all": {
+                "defaultMode": "all",
+                "visualTabWidth": 4,
+                "softTabWidth": 4,
+                "minimumGutterWidth": 2,
+                "emptyLineFill": "~",
+                "commandBufferPrompt": "> ",
+                "verticalBorder": " ",
+                "terminalNewline": "\r\n",
+                "terminalCarriageReturn": "\r",
+                "terminalNewline": "\n",
+                "terminalCarraigeReturnNewline": "\r\n",
+                #"lineEnd": "unix",
+                "softTabs": True,
+                "showLineNumbers": True,
+                "relativeLineNumbers": False,
+                "showEmptyLineFill": True,
+                "showTabList": True,
+                "showStatusLine": True,
+                "alwaysShowCommandBuffer": True,
+                "syntaxHighlighting": False,
+                "highlightCurrentLineNumber": True,
+                "highlightCurrentLine": True,
+            }
+        }
+        self.colors = {
+            "all": {
+                "default": "",
+                "lineNumber": "",
+                "currentLineNumber": self.terminal.bright,
+                "currentLine": "",
+                "activeSelection": self.terminal.reverse,
+                "emptyLineFill": "",
+                "tabName": self.terminal.on_gray20,
+                "currentTabName": self.terminal.bold,
+                "statusLine": self.terminal.on_gray25,
+                "currentStatusLine": self.terminal.bold_on_gray30,
+                "verticalBorder": self.terminal.on_gray25,
+                "commandBuffer": "",
+                "prompt": self.terminal.bold,
+                "input": "",
+                "activeCursor": self.terminal.reverse,
+                "inactiveCursor": self.terminal.reverse_underline,
+                "fileName": "",
+                "workingDirectory": self.terminal.italic,
+                "directoryName": "",
+                "match": self.terminal.reverse,
+            }
+        }
+        self.keybindings = {"all": {"q": self.quit}}
+        self.actions = {"all": {"draw": self.defaultDraw}}
+        self.mode = "all"
+        self.setup()
+
+    def setup(self):
+        # Sets up the state of the editor.
+        self.mode = "all"
+        self.workingDirectory = os.getcwd()
+        self.currentKeybindings = self.keybindings[self.mode]
+        self.currentGlobalKeybindings = self.keybindings["all"]
+        self.currentKeySequence = ""
+        self.buffers = [Buffer("*untitled*")]
+        self.commandBuffer = Buffer("*command*")
+        #self.rootView = VerticalSplitView([HorizontalSplitView(2*[BufferView(self.buffers[0])]), HorizontalSplitView([VerticalSplitView([BufferView(self.buffers[0], isActive=True), BufferView(self.buffers[0], isActive=False)]), BufferView(self.buffers[0], isActive=False), BufferView(self.buffers[0], isActive=False)])])
+        self.rootView = VerticalSplitView([BufferView(self.buffers[0]), TabView(2*[BufferView(self.buffers[0])]), BufferView(self.buffers[0])])
+        #self.rootView = HorizontalSplitView(2*[BufferView(self.buffers[0])])
+        self.rootView = HorizontalSplitView([TabView([self.rootView, BufferView(self.buffers[0])]), VerticalSplitView([TabView(2*[BufferView(self.buffers[0])]), BufferView(self.buffers[0], True)])])
+        #self.rootView = TabView(2*[BufferView(self.buffers[0])])
+        #self.rootView = TabView([self.rootView, BufferView(self.buffers[0])])
+        self.currentView = self.rootView
+        self.previousView = self.currentView
+        self.keepRunning = True
+        self.redraw = True
+        self.clearCommandBuffer = False
+
+    def getSetting(self, *settings):
+        # Returns the given setting(s).
+        if len(settings) == 1:
+            return self.settings[self.mode].get(settings[0], self.settings["all"].get(settings[0], None))
+        else:
+            return {setting: self.getSetting(setting) for setting in settings}
+
+    def getColor(self, *colors):
+        # Returns the given color(s).
+        if len(colors) == 1:
+            return self.colors[self.mode].get(colors[0], self.colors["all"].get(colors[0], None))
+        else:
+            return {color: self.getColor(color) for color in colors}
+
+    def runAction(self, action, *args):
+        # Runs the given action for this mode and returns the value if any.
+        return self.actions[self.mode].get(action, self.actions["all"].get(action, None))(*args)
+
+    def format(self, color, text):
+        # Formats the given string with the given color.
+        if color == "":
+            return text
+        else:
+            color = self.getColor(color)
+            return color + text if isinstance(color, str) else color(text)
+
+    def print(self, color, text, x=None, y=None, width=None, height=None, end="rn"):
+        # Prints the given text in the given color with the given end type.
+        end = {"r": self.getSetting("terminalCarriageReturn"), "n": self.getSetting("terminalNewline"), "rn": self.getSetting("terminalCarraigeReturnNewline"), "": ""}[end]
+        text = self.format(color, text[:min(len(text), width)])
+        if x is not None or y is not None:
+            with self.terminal.location(x, y):
+                print(text + self.terminal.normal, end=end)
+        else:
+            print(text + self.terminal.normal, end=end)
+
+    def registerKeypress(self, key):
+        # Registers the given key and performs an action if it is bound to something.
+        if self.currentGlobalKeybindings is not None:
+            self.currentGlobalKeybindings = self.currentGlobalKeybindings.get(key, self.currentGlobalKeybindings.get("Printable" if len(key) == 1 else "Unbound", 
+                None))
+        self.currentKeybindings = self.currentKeybindings.get(key, self.currentKeybindings.get("Printable" if len(key) == 1 else "Unbound", self.currentKeybindings.get(
+            "Unbound", self.currentGlobalKeybindings)))
+
+        if self.currentKeybindings is None:
+            self.currentKeybindings = self.keybindings[self.mode]
+            self.currentGlobalKeybindings = self.keybindings["all"]
+            self.currentKeySequence = ""
+        elif isinstance(self.currentKeybindings, dict):
+            self.currentKeySequence += key + " "
+        else:
+            self.currentKeybindings(key)
+            self.currentKeybindings = self.keybindings[self.mode]
+            self.currentGlobalKeybindings = self.keybindings["all"]
+            self.currentKeySequence = ""
+        self.redraw = True
+
+    def update(self):
+        # Takes input from the keyboard and updates the editor.
+        aliases = {
+            "KEY_ESCAPE": "Alt",
+            "KEY_UP": "Up",
+            "KEY_DOWN": "Down",
+            "KEY_LEFT": "Left",
+            "KEY_RIGHT": "Right",
+            "KEY_ENTER": "Enter",
+            "KEY_BACKSPACE": "Backspace",
+            "KEY_INSERT": "Insert",
+            "KEY_DELETE": "Delete",
+            "KEY_TAB": "Tab",
+            "KEY_F1": "F1",
+            "KEY_F2": "F2",
+            "KEY_F3": "F3",
+            "KEY_F4": "F4",
+            "KEY_F5": "F5",
+            "KEY_F6": "F6",
+            "KEY_F7": "F7",
+            "KEY_F8": "F8",
+            "KEY_F9": "F9",
+            "KEY_F10": "F10",
+            "KEY_F11": "F11",
+            "KEY_F12": "F12",
+        }
+        key = self.terminal.inkey(0)
+
+        if key:
+            if self.clearCommandBuffer:
+                self.commandBuffer.clear()
+                self.clearCommandBuffer = False
+
+            if key.is_sequence:
+                self.registerKeypress(aliases.get(key.name, key.name))
+            elif str(key).isascii() and 0 <= ord(key) <= 31:
+                self.registerKeypress("Ctrl")
+                self.registerKeypress(chr(ord(key) + 96).lower())
+            elif key == " ":
+                self.registerKeypress("Space")
+            elif len(str(key)) == 1 and str(key).isascii() and str(key).isprintable():
+                self.registerKeypress(str(key))
+
+    def draw(self):
+        # Draws the screen.
+        if self.redraw:
+            print(self.terminal.home + self.terminal.clear, end="")
+            self.runAction("draw", 0, 0, self.terminal.width, self.terminal.height)
+            self.redraw = False
+
+    def run(self, *args):
+        # Starts the editor.
+        self.setup()
+        self.buffers[0].name = "example.txt"
+        self.buffers[0].readFromFile(self.buffers[0].name)
+        with self.terminal.fullscreen(), self.terminal.raw(), self.terminal.keypad(), self.terminal.hidden_cursor():
+            while self.keepRunning:
+                self.draw()
+                self.update()
+        print(self.terminal.home + self.terminal.clear, end="")
+
+    def defaultBegin(self):
+        # The default behavior when a mode begins.
+        pass
+
+    def defaultEnd(self):
+        # The default behavior when a mode ends.
+        pass
+
+    def defaultDraw(self, x, y, width, height):
+        # The default behavior when the editor draws the screen.
+        self.rootView.draw(self, x, y, width, height)
+
+    def quit(self, key):
+        # Quits the editor.
+        self.keepRunning = False
+
+
+        
+
+
+
+
+
+
+
+
+
+
+"""
 class Editor:
     def __init__(self):
         self.terminal = blessed.Terminal()
@@ -50,7 +420,6 @@ class Editor:
             },
         }
         self.keybindings = {"all": {},}
-        self.actions = {"all": {},}
         self.mode = "all"
         self.setup()
 
@@ -791,4 +1160,5 @@ class Editor:
     def cancelBufferSearch(self, key=None):
         self.currentBufferIndex = self.bufferIndexBeforeSearch
         self.setMode("edit")(key)
+"""
 

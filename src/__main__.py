@@ -5,6 +5,14 @@ from editor import Editor
 
 if __name__ == "__main__":
     editor = Editor()
+    if len(sys.argv) > 1:
+        editor.run(sys.argv[1:])
+    else:
+        editor.run()
+
+"""
+if __name__ == "__main__":
+    editor = Editor()
 
     editor.addMode("homeMenu", {
         "draw": editor.homeMenuDraw,
@@ -94,3 +102,4 @@ if __name__ == "__main__":
         editor.run(sys.argv[1:])
     else:
         editor.run()
+"""

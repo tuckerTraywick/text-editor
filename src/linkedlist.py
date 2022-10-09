@@ -24,7 +24,7 @@ class Node:
             self.next = item
             item.previous = self
         else:
-            self.insertAfter(Node(item))
+            self.append(Node(item))
 
     def remove(self):
         # Removes this node from between its neighbors.
@@ -48,9 +48,13 @@ class LinkedList:
             yield currentNode.data
             currentNode = currentNode.next
 
+    def __repr__(self):
+        return f"[{', '.join(repr(node) for node in self)}]"
+
     @property
     def isEmpty(self):
-        return self.firstNode is not None
+        # Returns True if the list has no elements.
+        return self.length == 0
 
     def clear(self):
         # Empties the list.
