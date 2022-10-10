@@ -11,7 +11,7 @@ class VerticalSplitView:
 
     @property
     def name(self):
-        return f"({len(self.children)}) {self.children[0].name}"
+        return f"({len(self.children)}){self.children[0].name}"
 
     @property
     def hasTabs(self):
@@ -20,15 +20,18 @@ class VerticalSplitView:
     def drawVerticalLine(self, editor, x, y, height):
         border = editor.getSetting("verticalBorder")
         for i in range(y, y + height):
-            editor.print("verticalBorder", border, x, i, width=len(border), height=1, end="")
+            if i == y + height - 1:
+                editor.print("verticalBorder", editor.format("statusLine", " "), x, i, width=len(border), height=1, end="")
+            else:
+                editor.print("verticalBorder", border, x, i, width=len(border), height=1, end="")
 
     def drawHorizontalLine(self, editor, x, y, width):
-        editor.print("tabName", " "*width, x, y, width, 1, end="")
+        editor.print("", " "*width, x, y, width, 1, end="")
 
     def draw(self, editor, x, y, width, height):
         childWidth = width//len(self.children)
         for i, child in enumerate(self.children[:-1]):
-            if self.hasTabs and editor.getSetting("showTabList") and not isinstance(child, TabView):
+            if self.hasTabs and editor.getSetting("showTabList") and not child.hasTabs:#isinstance(child, TabView):
                 childY = y + 1
                 childHeight = height - 1
                 self.drawHorizontalLine(editor, x, y, childWidth)
@@ -36,9 +39,9 @@ class VerticalSplitView:
                 childY = y
                 childHeight = height
             child.draw(editor, x + childWidth*i, childY, childWidth - 1, childHeight)
-            self.drawVerticalLine(editor, x + childWidth*(i + 1) - 1, childY, childHeight)
+            self.drawVerticalLine(editor, x + childWidth*(i + 1) - 1, y, height)
 
-        if self.hasTabs and editor.getSetting("showTabList") and not isinstance(self.children[-1], TabView):
+        if self.hasTabs and editor.getSetting("showTabList") and not self.children[-1].hasTabs:#isinstance(self.children[-1], TabView):
             childY = y + 1
             childHeight = height - 1
             self.drawHorizontalLine(editor, x + childWidth*(len(self.children) - 1), y, width - childWidth*(len(self.children) - 1))
@@ -69,10 +72,10 @@ class HorizontalSplitView:
 
 
 class TabView:
-    def __init__(self, children, parent=None):
+    def __init__(self, children, currentTab=0, parent=None):
         self.children = children
         self.parent = parent
-        self.currentTab = 0
+        self.currentTab = currentTab
 
     @property
     def name(self):
@@ -89,10 +92,12 @@ class TabView:
             for i, child in enumerate(self.children):
                 tab = f" {i+1} {child.name} "
                 if i == self.currentTab:
-                    tabLine += editor.format("currentTabName", tab) + editor.terminal.normal
+                    tabLine += editor.format("currentTabSeparator", editor.getSetting("currentTabSeparator")) + editor.terminal.normal \
+                            +  editor.format("currentTabName",  tab) + editor.terminal.normal
                 else:
-                    tabLine += editor.format("tabName", tab) + editor.terminal.normal
-                length += len(tab)
+                    tabLine += editor.format("tabSeparator", editor.getSetting("tabSeparator")) + editor.terminal.normal \
+                            +  editor.format("tabName",  tab) + editor.terminal.normal
+                length += len(tab) + 1
             editor.print("", tabLine, x, y, width, 1)
             editor.print("tabName", " "*(width - length), x + length, y, width, 1)
 
@@ -116,9 +121,9 @@ class BufferView:
     @property
     def statusLine(self):
         if self.buffer.hasUnsavedChanges:
-            line = "[+] "
+            line = "+ "
         elif self.buffer.isReadonly:
-            line = "[ro] "
+            line = "ro "
         else:
             line = ""
         return line + f"{self.buffer.name} {(self.buffer.cursorY, self.buffer.cursorX)}"
@@ -131,7 +136,10 @@ class BufferView:
         for i, line in enumerate(self.buffer.lines):
             if height <= 1:
                 break
-            editor.print("currentLine", (editor.format("lineNumber", f"{i:>{gutterWidth}} ") if editor.getSetting("showLineNumbers") else "") + line, x, y, width, height, end="")
+
+            if editor.getSetting("showLineNumbers"):
+                editor.print("currentLineNumber" if i == self.buffer.cursorY else "lineNumber", f"{i:>{gutterWidth}} ", x, y, width, 1)
+            editor.print("currentLine" if i == self.buffer.cursorY else "", line.ljust(width-gutterWidth-1), x=x+gutterWidth+1, y=y, width=width-gutterWidth-1, height=1)
             y += 1
             height -= 1
 
@@ -142,7 +150,10 @@ class BufferView:
             height -= 1
 
         # Draw the statusline.
-        editor.print("currentStatusLine" if self.isActive else "statusLine", self.statusLine.ljust(width), x, y, width, height, end="")
+        left = editor.format("currentStatusLineIndicator", editor.getSetting("currentStatusLineLeftIndicator")) if self.isActive else editor.format("statusLineIndicator", editor.getSetting("statusLineLeftIndicator"))
+        right = editor.format("currentStatusLineIndicator", editor.getSetting("currentStatusLineRightIndicator")) if self.isActive else editor.format("statusLineIndicator", editor.getSetting("statusLineRightIndicator"))
+        editor.print("", left + editor.terminal.normal + editor.format("currentStatusLine" if self.isActive else "statusLine", self.statusLine) + editor.terminal.normal + right + " " \
+                + editor.terminal.normal + editor.format("statusLine", " ".ljust(width - len(self.statusLine) - 4)), x, y, width, height, end="")
 
         # Draw the cursor.
         editor.print("activeCursor" if self.isActive else "inactiveCursor", self.buffer.currentCharacter or " ", x + gutterWidth + 1 + self.buffer.cursorX, originalY + self.buffer.cursorY, 1, 1, end="")
@@ -157,9 +168,15 @@ class Editor:
                 "visualTabWidth": 4,
                 "softTabWidth": 4,
                 "minimumGutterWidth": 2,
-                "emptyLineFill": "~",
+                "emptyLineFill": "",
                 "commandBufferPrompt": "> ",
-                "verticalBorder": " ",
+                "verticalBorder": "\N{box drawings heavy vertical}",
+                "tabSeparator": "\N{box drawings light vertical}",
+                "currentTabSeparator": "\N{box drawings heavy vertical}",
+                "statusLineLeftIndicator": "\N{black lower left triangle} ",
+                "currentStatusLineLeftIndicator": "\N{black lower left triangle} ",
+                "statusLineRightIndicator": "\N{black lower right triangle}",
+                "currentStatusLineRightIndicator": "\N{black lower right triangle}",
                 "terminalNewline": "\r\n",
                 "terminalCarriageReturn": "\r",
                 "terminalNewline": "\n",
@@ -180,21 +197,25 @@ class Editor:
         self.colors = {
             "all": {
                 "default": "",
-                "lineNumber": "",
-                "currentLineNumber": self.terminal.bright,
+                "lineNumber": self.terminal.gray50,
+                "currentLineNumber": self.terminal.gray80,
                 "currentLine": "",
                 "activeSelection": self.terminal.reverse,
                 "emptyLineFill": "",
-                "tabName": self.terminal.on_gray20,
-                "currentTabName": self.terminal.bold,
-                "statusLine": self.terminal.on_gray25,
-                "currentStatusLine": self.terminal.bold_on_gray30,
-                "verticalBorder": self.terminal.on_gray25,
+                "tabName": self.terminal.gray70_on_gray20,
+                "currentTabName": self.terminal.bright_white_on_gray28,
+                "statusLine": self.terminal.gray70_on_gray30,
+                "currentStatusLine": self.terminal.bright_white_on_gray30,
+                "verticalBorder": self.terminal.gray30,#self.terminal.on_gray30,
+                "tabSeparator": self.terminal.gray60_on_gray20,
+                "currentTabSeparator": self.terminal.lightblue_on_gray30,
+                "statusLineIndicator": self.terminal.gray40_on_gray30,
+                "currentStatusLineIndicator": self.terminal.lemonchiffon_on_gray30,
                 "commandBuffer": "",
                 "prompt": self.terminal.bold,
                 "input": "",
                 "activeCursor": self.terminal.reverse,
-                "inactiveCursor": self.terminal.reverse_underline,
+                "inactiveCursor": self.terminal.on_gray30,
                 "fileName": "",
                 "workingDirectory": self.terminal.italic,
                 "directoryName": "",
@@ -216,11 +237,11 @@ class Editor:
         self.buffers = [Buffer("*untitled*")]
         self.commandBuffer = Buffer("*command*")
         #self.rootView = VerticalSplitView([HorizontalSplitView(2*[BufferView(self.buffers[0])]), HorizontalSplitView([VerticalSplitView([BufferView(self.buffers[0], isActive=True), BufferView(self.buffers[0], isActive=False)]), BufferView(self.buffers[0], isActive=False), BufferView(self.buffers[0], isActive=False)])])
-        self.rootView = VerticalSplitView([BufferView(self.buffers[0]), TabView(2*[BufferView(self.buffers[0])]), BufferView(self.buffers[0])])
+        self.rootView = VerticalSplitView([BufferView(self.buffers[0]), TabView(2*[BufferView(self.buffers[0])], currentTab=1), BufferView(self.buffers[0])])
         #self.rootView = HorizontalSplitView(2*[BufferView(self.buffers[0])])
-        self.rootView = HorizontalSplitView([TabView([self.rootView, BufferView(self.buffers[0])]), VerticalSplitView([TabView(2*[BufferView(self.buffers[0])]), BufferView(self.buffers[0], True)])])
+        self.rootView = HorizontalSplitView([TabView([self.rootView, BufferView(self.buffers[0]), BufferView(self.buffers[0])]), VerticalSplitView([TabView(2*[BufferView(self.buffers[0])]), BufferView(self.buffers[0], True)])])
         #self.rootView = TabView(2*[BufferView(self.buffers[0])])
-        #self.rootView = TabView([self.rootView, BufferView(self.buffers[0])])
+        #self.rootView = VerticalSplitView([self.rootView, BufferView(self.buffers[0])])
         self.currentView = self.rootView
         self.previousView = self.currentView
         self.keepRunning = True
@@ -256,7 +277,8 @@ class Editor:
     def print(self, color, text, x=None, y=None, width=None, height=None, end="rn"):
         # Prints the given text in the given color with the given end type.
         end = {"r": self.getSetting("terminalCarriageReturn"), "n": self.getSetting("terminalNewline"), "rn": self.getSetting("terminalCarraigeReturnNewline"), "": ""}[end]
-        text = self.format(color, text[:min(len(text), width)])
+        #text = self.format(color, text[:min(len(text), width)])  # Length bug. need actual length, not formatted length.
+        text = self.format(color, text)
         if x is not None or y is not None:
             with self.terminal.location(x, y):
                 print(text + self.terminal.normal, end=end)
@@ -356,14 +378,11 @@ class Editor:
     def defaultDraw(self, x, y, width, height):
         # The default behavior when the editor draws the screen.
         self.rootView.draw(self, x, y, width, height)
+        #self.print("commandBuffer", "> command here", 0, height, width, 1, end="")
 
     def quit(self, key):
         # Quits the editor.
         self.keepRunning = False
-
-
-        
-
 
 
 
