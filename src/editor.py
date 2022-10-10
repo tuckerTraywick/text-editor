@@ -1,4 +1,4 @@
-import os
+rmport os
 import pathlib
 import blessed
 from buffer import Buffer
