@@ -1,4 +1,4 @@
-rmport os
+import os
 import pathlib
 import blessed
 from buffer import Buffer
@@ -20,35 +20,14 @@ class VerticalSplitView:
     def drawVerticalLine(self, editor, x, y, height):
         border = editor.getSetting("verticalBorder")
         for i in range(y, y + height):
-            if i == y + height - 1:
-                editor.print("verticalBorder", editor.format("statusLine", " "), x, i, width=len(border), height=1, end="")
-            else:
-                editor.print("verticalBorder", border, x, i, width=len(border), height=1, end="")
-
-    def drawHorizontalLine(self, editor, x, y, width):
-        editor.print("", " "*width, x, y, width, 1, end="")
+            editor.print("verticalBorder", border, x, i, width=len(border))
 
     def draw(self, editor, x, y, width, height):
         childWidth = width//len(self.children)
         for i, child in enumerate(self.children[:-1]):
-            if self.hasTabs and editor.getSetting("showTabList") and not child.hasTabs:#isinstance(child, TabView):
-                childY = y + 1
-                childHeight = height - 1
-                self.drawHorizontalLine(editor, x, y, childWidth)
-            else:
-                childY = y
-                childHeight = height
-            child.draw(editor, x + childWidth*i, childY, childWidth - 1, childHeight)
-            self.drawVerticalLine(editor, x + childWidth*(i + 1) - 1, y, height)
-
-        if self.hasTabs and editor.getSetting("showTabList") and not self.children[-1].hasTabs:#isinstance(self.children[-1], TabView):
-            childY = y + 1
-            childHeight = height - 1
-            self.drawHorizontalLine(editor, x + childWidth*(len(self.children) - 1), y, width - childWidth*(len(self.children) - 1))
-        else:
-            childY = y
-            childHeight = height
-        self.children[-1].draw(editor, x + childWidth*(len(self.children) - 1), childY, width - childWidth*(len(self.children) - 1), childHeight)
+            child.draw(editor, x + childWidth*i, y, childWidth, height)
+            self.drawVerticalLine(editor, x + childWidth*(i+1) - 1, y, height)
+        self.children[-1].draw(editor, x + childWidth*(len(self.children) - 1), y, width - childWidth*(len(self.children) - 1), height)
 
 
 class HorizontalSplitView:
@@ -87,20 +66,12 @@ class TabView:
 
     def draw(self, editor, x, y, width, height):
         if editor.getSetting("showTabList"):
-            tabLine = ""
-            length = 0
+            tabX = x
             for i, child in enumerate(self.children):
-                tab = f" {i+1} {child.name} "
-                if i == self.currentTab:
-                    tabLine += editor.format("currentTabSeparator", editor.getSetting("currentTabSeparator")) + editor.terminal.normal \
-                            +  editor.format("currentTabName",  tab) + editor.terminal.normal
-                else:
-                    tabLine += editor.format("tabSeparator", editor.getSetting("tabSeparator")) + editor.terminal.normal \
-                            +  editor.format("tabName",  tab) + editor.terminal.normal
-                length += len(tab) + 1
-            editor.print("", tabLine, x, y, width, 1)
-            editor.print("tabName", " "*(width - length), x + length, y, width, 1)
-
+                tab = f"  {child.name}  "
+                editor.print("currentTabName" if self.currentTab == i else "tabName", tab, tabX, y, width)
+                tabX += len(tab)
+            editor.print("tabName", "".ljust(width - tabX + x), tabX, y, width - tabX + x)
         self.children[self.currentTab].draw(editor, x, y + 1, width, height - 1)
 
 
@@ -109,6 +80,7 @@ class BufferView:
         self.buffer = buffer
         self.isActive = isActive
         self.parent = parent
+        self.scrollX, self.scrollY = 0, 0
 
     @property
     def name(self):
@@ -126,37 +98,39 @@ class BufferView:
             line = "ro "
         else:
             line = ""
-        return line + f"{self.buffer.name} {(self.buffer.cursorY, self.buffer.cursorX)}"
+        return line + f"{self.buffer.name} ({self.buffer.cursorY + 1}, {self.buffer.cursorX + 1}) ({self.scrollY})"
+
+    def adjustScroll(self, width, height):
+        if self.buffer.cursorY < self.scrollY:
+            self.scrollY = self.buffer.cursorY
+        elif self.buffer.cursorY >= self.scrollY + height - 1:
+            self.scrollY = self.buffer.cursorY - height + 2
 
     def draw(self, editor, x, y, width, height):
         gutterWidth = max(editor.getSetting("minimumGutterWidth"), len(str(self.buffer.numberOfLines)))
         originalY = y
 
         # Draw the lines and line numbers.
-        for i, line in enumerate(self.buffer.lines):
+        for i, line in enumerate(self.buffer.lines[self.scrollY:]):
             if height <= 1:
                 break
 
             if editor.getSetting("showLineNumbers"):
-                editor.print("currentLineNumber" if i == self.buffer.cursorY else "lineNumber", f"{i:>{gutterWidth}} ", x, y, width, 1)
-            editor.print("currentLine" if i == self.buffer.cursorY else "", line.ljust(width-gutterWidth-1), x=x+gutterWidth+1, y=y, width=width-gutterWidth-1, height=1)
+                editor.print("currentLineNumber" if self.scrollY + i == self.buffer.cursorY else "lineNumber", f"{self.scrollY + i + 1:>{gutterWidth}} ", x, y, width)
+            editor.print("currentLine" if self.scrollY + i == self.buffer.cursorY else "", line.ljust(width-gutterWidth-1), x+gutterWidth+1, y, width-gutterWidth-1)
             y += 1
             height -= 1
 
         # Draw the empty lines.
         while height > 1:
-            editor.print("emptyLineFill", editor.getSetting("emptyLineFill"), x, y, width, height, end="")
+            editor.print("emptyLineFill", editor.getSetting("emptyLineFill"), x, y, width)
             y += 1
             height -= 1
 
         # Draw the statusline.
-        left = editor.format("currentStatusLineIndicator", editor.getSetting("currentStatusLineLeftIndicator")) if self.isActive else editor.format("statusLineIndicator", editor.getSetting("statusLineLeftIndicator"))
-        right = editor.format("currentStatusLineIndicator", editor.getSetting("currentStatusLineRightIndicator")) if self.isActive else editor.format("statusLineIndicator", editor.getSetting("statusLineRightIndicator"))
-        editor.print("", left + editor.terminal.normal + editor.format("currentStatusLine" if self.isActive else "statusLine", self.statusLine) + editor.terminal.normal + right + " " \
-                + editor.terminal.normal + editor.format("statusLine", " ".ljust(width - len(self.statusLine) - 4)), x, y, width, height, end="")
-
+        editor.print("currentStatusLine" if self.isActive else "statusLine", self.statusLine.ljust(width - 1), x, y, width)
         # Draw the cursor.
-        editor.print("activeCursor" if self.isActive else "inactiveCursor", self.buffer.currentCharacter or " ", x + gutterWidth + 1 + self.buffer.cursorX, originalY + self.buffer.cursorY, 1, 1, end="")
+        editor.print("activeCursor" if self.isActive else "inactiveCursor", self.buffer.currentCharacter or " ", x + gutterWidth + 1 + self.buffer.cursorX, originalY + self.buffer.cursorY - self.scrollY, 1)
 
 
 class Editor:
@@ -170,17 +144,12 @@ class Editor:
                 "minimumGutterWidth": 2,
                 "emptyLineFill": "",
                 "commandBufferPrompt": "> ",
-                "verticalBorder": "\N{box drawings heavy vertical}",
-                "tabSeparator": "\N{box drawings light vertical}",
-                "currentTabSeparator": "\N{box drawings heavy vertical}",
-                "statusLineLeftIndicator": "\N{black lower left triangle} ",
-                "currentStatusLineLeftIndicator": "\N{black lower left triangle} ",
-                "statusLineRightIndicator": "\N{black lower right triangle}",
-                "currentStatusLineRightIndicator": "\N{black lower right triangle}",
+                "verticalBorder": " ",
+                "horizontalBorder": " ",
                 "terminalNewline": "\r\n",
                 "terminalCarriageReturn": "\r",
                 "terminalNewline": "\n",
-                "terminalCarraigeReturnNewline": "\r\n",
+                "terminalCarriageReturnNewline": "\r\n",
                 #"lineEnd": "unix",
                 "softTabs": True,
                 "showLineNumbers": True,
@@ -197,56 +166,108 @@ class Editor:
         self.colors = {
             "all": {
                 "default": "",
-                "lineNumber": self.terminal.gray50,
-                "currentLineNumber": self.terminal.gray80,
+                "lineNumber": "",
+                "currentLineNumber": "",
                 "currentLine": "",
-                "activeSelection": self.terminal.reverse,
+                "activeSelection": "",
                 "emptyLineFill": "",
-                "tabName": self.terminal.gray70_on_gray20,
-                "currentTabName": self.terminal.bright_white_on_gray28,
-                "statusLine": self.terminal.gray70_on_gray30,
-                "currentStatusLine": self.terminal.bright_white_on_gray30,
-                "verticalBorder": self.terminal.gray30,#self.terminal.on_gray30,
-                "tabSeparator": self.terminal.gray60_on_gray20,
-                "currentTabSeparator": self.terminal.lightblue_on_gray30,
-                "statusLineIndicator": self.terminal.gray40_on_gray30,
-                "currentStatusLineIndicator": self.terminal.lemonchiffon_on_gray30,
+                "tabName": self.terminal.underline,
+                "currentTabName": self.terminal.reverse_bold,
+                "statusLine": self.terminal.reverse,
+                "currentStatusLine": self.terminal.reverse,
+                "verticalBorder": self.terminal.reverse,
+                "horizontalBorder": "",
+                "tabSeparator": "  ",
                 "commandBuffer": "",
-                "prompt": self.terminal.bold,
+                "prompt": "",
                 "input": "",
                 "activeCursor": self.terminal.reverse,
-                "inactiveCursor": self.terminal.on_gray30,
+                "inactiveCursor": self.terminal.reverse_underline_italic,
                 "fileName": "",
-                "workingDirectory": self.terminal.italic,
+                "workingDirectory": "",
                 "directoryName": "",
-                "match": self.terminal.reverse,
+                "match": "",
             }
         }
-        self.keybindings = {"all": {"q": self.quit}}
+        self.keybindings = {"all": {}}
         self.actions = {"all": {"draw": self.defaultDraw}}
         self.mode = "all"
         self.setup()
 
     def setup(self):
         # Sets up the state of the editor.
-        self.mode = "all"
+        self.mode = self.getSetting("defaultMode")
         self.workingDirectory = os.getcwd()
         self.currentKeybindings = self.keybindings[self.mode]
         self.currentGlobalKeybindings = self.keybindings["all"]
         self.currentKeySequence = ""
         self.buffers = [Buffer("*untitled*")]
         self.commandBuffer = Buffer("*command*")
-        #self.rootView = VerticalSplitView([HorizontalSplitView(2*[BufferView(self.buffers[0])]), HorizontalSplitView([VerticalSplitView([BufferView(self.buffers[0], isActive=True), BufferView(self.buffers[0], isActive=False)]), BufferView(self.buffers[0], isActive=False), BufferView(self.buffers[0], isActive=False)])])
-        self.rootView = VerticalSplitView([BufferView(self.buffers[0]), TabView(2*[BufferView(self.buffers[0])], currentTab=1), BufferView(self.buffers[0])])
+        self.rootView = VerticalSplitView([HorizontalSplitView(2*[BufferView(self.buffers[0])]), HorizontalSplitView([VerticalSplitView([BufferView(self.buffers[0], isActive=True), BufferView(self.buffers[0], isActive=False)]), BufferView(self.buffers[0], isActive=False), BufferView(self.buffers[0], isActive=False)])])
+        #self.rootView = VerticalSplitView([BufferView(self.buffers[0]), TabView(3*[BufferView(self.buffers[0], True)], currentTab=1)])
+        #self.rootView = TabView([BufferView(self.buffers[0])]*4, currentTab=2)
+        #self.rootView = VerticalSplitView([self.rootView, HorizontalSplitView([BufferView(self.buffers[0], True), BufferView(self.buffers[0])])])
         #self.rootView = HorizontalSplitView(2*[BufferView(self.buffers[0])])
-        self.rootView = HorizontalSplitView([TabView([self.rootView, BufferView(self.buffers[0]), BufferView(self.buffers[0])]), VerticalSplitView([TabView(2*[BufferView(self.buffers[0])]), BufferView(self.buffers[0], True)])])
-        #self.rootView = TabView(2*[BufferView(self.buffers[0])])
-        #self.rootView = VerticalSplitView([self.rootView, BufferView(self.buffers[0])])
-        self.currentView = self.rootView
+        #self.rootView = HorizontalSplitView([self.rootView, BufferView(self.buffers[0]), VerticalSplitView([TabView(2*[BufferView(self.buffers[0])]), BufferView(self.buffers[0], True)])])
+        self.rootView = VerticalSplitView(2*[BufferView(self.buffers[0], True)])
+
+        #self.rootView = BufferView(self.buffers[0], True)
+        self.currentView = self.rootView.children[0]
         self.previousView = self.currentView
+        self.currentBuffer = self.buffers[0]
+        self.output = []
         self.keepRunning = True
         self.redraw = True
         self.clearCommandBuffer = False
+
+    def addMode(self, name, actions={}):
+        # Adds a new mode with the given name and actions.
+        self.settings[name] = {}
+        self.keybindings[name] = {}
+        self.colors[name] = {}
+        self.actions[name] = {
+            "begin": self.defaultBegin,
+            "end": self.defaultEnd,
+            "draw": self.defaultDraw,
+        }
+        self.actions[name].update(actions)
+
+    def removeMode(self, *modes):
+        # Removes the given mode and all of its settings, colors, and keybindings.
+        for mode in modes:
+            del self.settings[mode], self.keybindings[mode], self.colors[mode], self.actions[mode]
+
+    def addKeybinding(self, modes, sequence, action):
+        # Binds the given sequence to the given action in the given modes.
+        if isinstance(modes, list):
+            for mode in modes:
+                self.addKeybinding(mode, sequence, action)
+            return
+
+        mode = modes
+        if mode[0] == "!":
+            for key in self.keybindings:
+                if key != mode[1:]:
+                    self.addKeybinding(key, sequence, action)
+            return
+
+        if isinstance(sequence, list):
+            for seq in sequence:
+                self.addKeybinding(modes, seq, action)
+            return
+
+        currentBinding = self.keybindings[mode]
+        previousBinding = currentBinding
+        for key in sequence.split(" "):
+            if key not in currentBinding:
+                currentBinding[key] = {}
+            previousBinding = currentBinding
+            currentBinding = currentBinding[key]
+        previousBinding[key] = action
+
+    def removeKeybinding(modes, *bindings):
+        # Removes the given keybinding(s) from the given modes.
+        pass
 
     def getSetting(self, *settings):
         # Returns the given setting(s).
@@ -255,6 +276,34 @@ class Editor:
         else:
             return {setting: self.getSetting(setting) for setting in settings}
 
+    def setSetting(self, mode, setting, value):
+        # Sets the given setting to the given value in the given modes.
+        if isinstance(mode, list):
+            for m in mode:
+                self.setSetting(m, setting, value)
+            return
+        self.settings[mode][setting] = value
+
+    def setSettings(self, mode, settings):
+        # Sets the given settings in the given modes.
+        if isinstance(mode, list):
+            for m in mode:
+                self.setSettings(m, settings)
+            return
+        self.settings[mode].update(settings)
+
+
+    def removeSetting(self, mode, *settings):
+        # Removes the given setting(s).
+        if isinstance(mode, list):
+            for m in mode:
+                self.removeSetting(m, settings)
+            return
+
+        for setting in settings:
+            if setting in self.settings[mode]:
+                del self.settings[mode][setting]
+
     def getColor(self, *colors):
         # Returns the given color(s).
         if len(colors) == 1:
@@ -262,28 +311,45 @@ class Editor:
         else:
             return {color: self.getColor(color) for color in colors}
 
+    def setColor(self, mode, textType, color):
+        # Sets the given color.
+        self.colors[mode][textType] = color
+
+    def setColors(self, mode, colors):
+        # Sets the given colors.
+        self.colors[mode].update(colors)
+
+    def removeColor(self, mode, *colors):
+        # Removes the given color(s) from the editor.
+        for color in colors:
+            if color in self.colors[mode]:
+                del self.colors[mode][color]
+
     def runAction(self, action, *args):
         # Runs the given action for this mode and returns the value if any.
         return self.actions[self.mode].get(action, self.actions["all"].get(action, None))(*args)
 
-    def format(self, color, text):
-        # Formats the given string with the given color.
+    def applyColor(self, color, text):
+        # Applies the given color to the given text
         if color == "":
             return text
         else:
             color = self.getColor(color)
             return color + text if isinstance(color, str) else color(text)
 
-    def print(self, color, text, x=None, y=None, width=None, height=None, end="rn"):
-        # Prints the given text in the given color with the given end type.
+    def format(self, color, text, x=None, y=None, width=None, end=""):
+        # Returns the given text in the given color with the given end type.
         end = {"r": self.getSetting("terminalCarriageReturn"), "n": self.getSetting("terminalNewline"), "rn": self.getSetting("terminalCarraigeReturnNewline"), "": ""}[end]
         #text = self.format(color, text[:min(len(text), width)])  # Length bug. need actual length, not formatted length.
-        text = self.format(color, text)
-        if x is not None or y is not None:
-            with self.terminal.location(x, y):
-                print(text + self.terminal.normal, end=end)
+        text = self.applyColor(color, text[:min(len(text), width)])
+        if x is not None:
+            return self.terminal.move_yx(y, x) + text + end + self.terminal.normal
         else:
-            print(text + self.terminal.normal, end=end)
+            return text + end + self.terminal.normal
+
+    def print(self, color, text, x=None, y=None, width=None, end=""):
+        # Adds the given text to the editor's current frame to be printed.
+        self.output.append(self.format(color, text, x, y, width, end))
 
     def registerKeypress(self, key):
         # Registers the given key and performs an action if it is bound to something.
@@ -354,6 +420,8 @@ class Editor:
         if self.redraw:
             print(self.terminal.home + self.terminal.clear, end="")
             self.runAction("draw", 0, 0, self.terminal.width, self.terminal.height)
+            print("".join(self.output), end="", flush=True)
+            self.output = []
             self.redraw = False
 
     def run(self, *args):
@@ -380,9 +448,66 @@ class Editor:
         self.rootView.draw(self, x, y, width, height)
         #self.print("commandBuffer", "> command here", 0, height, width, 1, end="")
 
+    """ ACTIONS """
     def quit(self, key):
         # Quits the editor.
         self.keepRunning = False
+
+    def exit(self, key):
+        # Exit the editor without saving.
+        self.keepRunning = False
+
+    def insertCharacter(self, key):
+        # Inserts the given character into the current buffer.
+        if not self.currentBuffer.isReadonly:
+            self.currentBuffer.insert(" " if key == "Space" else str(key))
+            self.currentView.adjustScroll(self.terminal.width, self.terminal.height)
+            self.redraw = True
+
+    def deleteCharacterLeft(self, key):
+        # Deletes one character left.
+        if self.currentBuffer.notAtBeginning or self.currentBuffer.isSelecting:
+            self.currentBuffer.deleteCharacterLeft()
+            self.currentView.adjustScroll(self.terminal.width, self.terminal.height)
+            self.redraw = True
+
+    def splitLine(self, key):
+        # Splits the current line.
+        self.currentBuffer.splitLine()
+        self.currentView.adjustScroll(self.terminal.width, self.terminal.height)
+        self.redraw = True
+
+    def cursorLineUp(self, key):
+        # Moves the current cursor one line up.
+        if self.currentBuffer.notAtBeginning:
+            self.currentBuffer.cursorLineUp()
+            self.redraw = True
+
+        if self.currentView.scrollY > 0 and self.currentView.scrollY > self.currentBuffer.cursorY:
+            self.currentView.scrollY = self.currentBuffer.cursorY
+            self.redraw = True
+
+    def cursorLineDown(self, key):
+        # Moves the current cursor one line down.
+        if self.currentBuffer.notAtEnd:
+            self.currentBuffer.cursorLineDown()
+            self.currentView.adjustScroll(self.terminal.width, self.terminal.height)
+            self.redraw = True
+        elif self.currentView.scrollY < self.currentBuffer.numberOfLines - 1:
+            self.currentView.scrollY += 1
+            self.redraw = True
+
+    def cursorCharacterLeft(self, key):
+        # Moves the current cursor one character left.
+        if self.currentBuffer.notAtBeginning:
+            self.currentBuffer.cursorCharacterLeft()
+            self.redraw = True
+
+    def cursorCharacterRight(self, key):
+        # Moves the current cursor one character right.
+        if self.currentBuffer.notAtEnd:
+            self.currentBuffer.cursorCharacterRight()
+            self.redraw = True
 
 
 

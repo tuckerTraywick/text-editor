@@ -5,23 +5,13 @@ from editor import Editor
 
 if __name__ == "__main__":
     editor = Editor()
-    if len(sys.argv) > 1:
-        editor.run(sys.argv[1:])
-    else:
-        editor.run()
 
-"""
-if __name__ == "__main__":
-    editor = Editor()
-
-    editor.addMode("homeMenu", {
+    """editor.addMode("homeMenu", {
         "draw": editor.homeMenuDraw,
-    })
+    })"""
     editor.addMode("edit", {
-        "begin": editor.editBegin,
-        "end": editor.editEnd,
     })
-    editor.addMode("findBuffer", {
+    """editor.addMode("findBuffer", {
         "begin": editor.findBufferBegin,
         "end": editor.findBufferEnd,
         "draw": editor.findBufferDraw,
@@ -42,19 +32,18 @@ if __name__ == "__main__":
         "previousSearchResult": editor.findFilePreviousSearchResult,
         "overlap": editor.findFileOverlap,
         "highlight": editor.highlightMatches,
-    })
+    })"""
 
     editor.setSettings("all", {
         "defaultMode": "edit",
         "showLineNumbers": True,
         "relativeLineNumbers": False,
-        "showStatusLine": True,
     })
-    editor.setSettings(["findBuffer", "findFile"], {
+    """editor.setSettings(["findBuffer", "findFile"], {
         "fullscreen": False,
-    })
+    })"""
 
-    editor.setColors("all", {
+    """editor.setColors("all", {
         "lineNumber": editor.terminal.gray40,
         "emptyLineFill": editor.terminal.gray40,
         "currentLine": editor.terminal.on_gray17,
@@ -67,9 +56,20 @@ if __name__ == "__main__":
         "directory": editor.terminal.lightsteelblue2,
         "workingDirectory": editor.terminal.italic_gray60,
         "match": editor.terminal.khaki3,
-    })
+    })"""
 
     leader = "Space"
+    editor.addKeybinding("all", ["Ctrl q", f"Alt {leader} q"], editor.quit)
+    editor.addKeybinding("all", ["Ctrl e", f"Alt {leader} e"], editor.exit)
+    editor.addKeybinding("edit", ["Printable", "Space"], editor.insertCharacter)
+    editor.addKeybinding(["edit"], ["Up", "Alt i"], editor.cursorLineUp)
+    editor.addKeybinding(["edit"], ["Down", "Alt k"], editor.cursorLineDown)
+    editor.addKeybinding(["edit"], ["Left", "Alt j"], editor.cursorCharacterLeft)
+    editor.addKeybinding(["edit"], ["Right", "Alt l"], editor.cursorCharacterRight)
+    editor.addKeybinding(["edit"], ["Backspace"], editor.deleteCharacterLeft)
+    editor.addKeybinding(["edit"], ["Enter"], editor.splitLine)
+
+    """leader = "Space"
     editor.addKeybinding("all", ["Ctrl q", f"Alt {leader} q"], editor.quit)
     editor.addKeybinding("all", ["Ctrl e", f"Alt {leader} e"], editor.exit)
     editor.addKeybinding(["edit"], ["Ctrl s", f"Alt {leader} s"], editor.saveBuffer)
@@ -96,10 +96,10 @@ if __name__ == "__main__":
     editor.addKeybinding(["findBuffer", "findFile"], ["Down", "Alt k"], editor.nextSearchResult)
     editor.addKeybinding(["findBuffer", "findFile"], ["Enter"], editor.chooseSearchResult)
     editor.addKeybinding(["findBuffer", "findFile"], ["Tab"], editor.copySearchResult)
-    editor.addKeybinding(["findBuffer", "findFile"], ["Alt q"], editor.setMode("edit"))
+    editor.addKeybinding(["findBuffer", "findFile"], ["Alt q"], editor.setMode("edit"))"""
 
     if len(sys.argv) > 1:
         editor.run(sys.argv[1:])
     else:
         editor.run()
-"""
+
