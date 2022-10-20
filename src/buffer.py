@@ -1,59 +1,15 @@
 import os
 
 
-class Selection:
-    def __init__(self, startX, startY, endX=None, endY=None):
-        self.startX, self.startY = startX, startY
-        self.endX = startX if endX is None else endX
-        self.endY = startY if endY is None else endY
-
-    def __repr__(self):
-        return repr(vars(self))
-
-    @property
-    def width(self):
-        # Returns the horizontal size of the selection.
-        return abs(self.endX - self.startX) + 1
-
-    @property
-    def height(self):
-        # Returns the vertical size of the selection.
-        return abs(self.endY - self.startY) + 1
-
-    @property
-    def firstX(self):
-        if self.startY < self.endY:
-            return self.startX
-        elif self.startY > self.endY:
-            return self.endX
-        else:
-            return min(self.startX, self.endX)
-
-    @property
-    def firstY(self):
-        return min(self.startY, self.endY)
-
-    @property
-    def lastX(self):
-        if self.startY < self.endY:
-            return self.endX
-        elif self.startY > self.endY:
-            return self.startX
-        else:
-            return max(self.startX, self.endX)
-
-    @property
-    def lastY(self):
-        return max(self.startY, self.endY)
-
-
 class Buffer:
     WHITESPACE = "\n\r\t "
     BRACKETS = "()[]{}"
     SYMBOLS = "`~!@#$%^&*-_=+\\|;:'\",<.>/?"
 
-    def __init__(self, name):
+    def __init__(self, name="", lines=None, allowNewLines=True):
         self.name = name
+        self.lines = [] if lines is None else lines
+        self.allowNewLines = allowNewLines
         self.clear()
 
     def __repr__(self):
@@ -61,90 +17,106 @@ class Buffer:
 
     @property
     def numberOfLines(self):
+        # Returns the number of lines in the buffer.
         return len(self.lines)
 
     @property
-    def activeSelection(self):
-        return self.selections[self.activeSelectionIndex]
-
-    @property
-    def cursorX(self):
-        return self.activeSelection.endX
-
-    @cursorX.setter
-    def cursorX(self, cursorX):
-        self.activeSelection.endX = cursorX
-        if not self.isSelecting:
-            self.activeSelection.startX = cursorX
-
-    @property
-    def cursorY(self):
-        return self.activeSelection.endY
-
-    @cursorY.setter
-    def cursorY(self, cursorY):
-        self.activeSelection.endY = cursorY
-        if not self.isSelecting:
-            self.activeSelection.startY = cursorY
-
-    @property
     def currentLine(self):
+        # Returns the text of the line the cursor is on.
         return self.lines[self.cursorY]
 
     @currentLine.setter
     def currentLine(self, currentLine):
+        # Sets the text of the line the cursor is on.
         self.lines[self.cursorY] = currentLine
 
     @property
     def currentCharacter(self):
+        # Returns the character under the cursor.
+        # Returns "" if the cursor is at the end of a line.
         return "" if self.cursorX == len(self.currentLine) else self.currentLine[self.cursorX]
 
     @property
     def previousCharacter(self):
+        # Returns the character behind the cursor.
         self.cursorCharacterLeft()
         ch = self.currentCharacter
         self.cursorCharacterRight()
         return ch
 
     @property
-    def notAtBeginning(self):
-        return self.cursorX > 0 or self.cursorY > 0
+    def cursorX(self):
+        # Returns the x coordinate of the cursor.
+        return self._cursorX
+
+    @cursorX.setter
+    def cursorX(self, cursorX):
+        # Sets the y coordinate of the cursor.
+        self._cursorX = cursorX
+        if not self.isSelecting:
+            self.startX = cursorX
 
     @property
-    def notAtEnd(self):
-        return self.cursorX < len(self.currentLine) or self.cursorY < self.numberOfLines - 1
+    def cursorY(self):
+        # Returns the y coordinate of the cursor.
+        return self._cursorY
 
-    def clear(self):
-        self.lines = [""]
-        self.selections = [Selection(0, 0)]
-        self.activeSelectionIndex = 0
-        self.maxCursorX = 0
-        self.isReadonly = False
-        self.isSelecting = False
-        self.hasUnsavedChanges = False
+    @cursorY.setter
+    def cursorY(self, cursorY):
+        # Sets the y coordinate of the cursor.
+        self._cursorY = cursorY
+        if not self.isSelecting:
+            self.startY = cursorY
 
-    def readFromFile(self, file):
-        # Reads the given file into the buffer.
-        if isinstance(file, str):
-            fileObject = open(file, "r")
-            self.readFromFile(fileObject)
-            fileObject.close()
+    @property
+    def firstX(self):
+        # Returns the x coordinate of the start of the selection.
+        if self.cursorY > self.startY:
+            return self.startX
+        elif self.cursorY < self.startY:
+            return self.cursorX
         else:
-            assert file.readable()
-            self.clear()
-            self.lines = [line.strip("\r\n") for line in file.readlines()]
-            self.isReadonly = not os.access(file.name, os.W_OK)
+            return min(self.startX, self.cursorX)
 
-    def writeToFile(self, file):
-        # Writes the buffer to the given file.
-        if isinstance(file, string):
-            fileObject = open(file, "w")
-            self.writeToFile(file)
-            fileObject.close()
+    @property
+    def firstY(self):
+        # Returns the y coordinate of the start of the selection.
+        return min(self.startY, self.cursorY)
+
+    @property
+    def lastX(self):
+        # Returns the x coordinate of the end of the selection.
+        if self.cursorY > self.startY:
+            return self.cursorX
+        elif self.cursorY < self.startY:
+            return self.startX
         else:
-            assert file.writable()
-            file.writeLines(self.lines)
-            self.hasUnsavedChanges = False
+            return max(self.startX, self.cursorX)
+
+    @property
+    def lastY(self):
+        # Returns the y coordinate of the end of the selection.
+        return max(self.startY, self.cursorY)
+
+    @property
+    def selectionWidth(self):
+        # Returns the width of the selection (including the cursor itself).
+        return self.lastX - self.firstX + 1
+
+    @property
+    def selectionHeight(self):
+        # Returns the height of the selection.
+        return self.lastY - self.firstY + 1
+
+    @property
+    def isAtBeginning(self):
+        # Returns True if the cursor is at the beginning of the buffer.
+        return self.cursorX == 0 and self.cursorY == 0
+
+    @property
+    def isAtEnd(self):
+        # Returns True if the cursor is at the end of the buffer.
+        return self.cursorX == len(self.currentLine) and self.cursorY == self.numberOfLines - 1
 
     def _insertLine(self, lineNumber):
         # Inserts a new line at the given line number.
@@ -162,18 +134,81 @@ class Buffer:
     def _deleteTextInLine(self, lineNumber, startIndex, endIndex):
         # Deletes the text in the given range at the given line number.
         self.lines[lineNumber] = self.lines[lineNumber][:startIndex] + self.lines[lineNumber][endIndex:]
-        #if not self.lines[lineNumber]:
-            #self._deleteLine(lineNumber)
+
+    def clear(self):
+        # Clears the contents of the buffer.
+        self.lines.clear()
+        self.lines += [""]
+        self._cursorX, self._cursorY = 0, 0
+        self.startX, self.startY = 0, 0
+        self.scrollX, self.scrollY = 0, 0
+        self.maxCursorX = 0
+        self.isReadOnly = False
+        self.isSelecting = False
+        self.hasUnsavedChanges = False
+
+    def readFromFile(self, file):
+        # Reads the given file into the buffer.
+        if isinstance(file, str):
+            fileObject = open(file, "r")
+            self.readFromFile(fileObject)
+            fileObject.close()
+        else:
+            assert file.readable()
+            self.clear()
+            self.lines.clear()
+            self.lines += [line.strip("\r\n") for line in file.readlines()]
+            self.isReadOnly = not os.access(file.name, os.W_OK)
+
+    def writeToFile(self, file):
+        # Writes the buffer to the given file.
+        if isinstance(file, string):
+            fileObject = open(file, "w")
+            self.writeToFile(file)
+            fileObject.close()
+        else:
+            assert file.writable()
+            file.writeLines(self.lines)
+            self.hasUnsavedChanges = False
+
+    def adjustScroll(self, width, gutterWidth, height):
+        if self.cursorX < self.scrollX:
+            self.scrollX = self.cursorX
+        elif self.cursorX >= self.scrollX + width - gutterWidth - 1:
+            self.scrollX = self.cursorX - width + gutterWidth + 2
+
+        if self.cursorY < self.scrollY:
+            self.scrollY = self.cursorY
+        elif self.cursorY >= self.scrollY + height - 1:
+            self.scrollY = self.cursorY - height + 1
+
+    def selectedRange(self, lineNumber):
+        # Returns the range of characters (start, end + 1) in the given line that are selected.
+        # Returns None if the line is not inside of the selection.
+        if lineNumber == self.firstY:
+            return (self.firstX, self.lastX if lineNumber == self.lastY else len(self.lines[lineNumber]))
+        elif lineNumber == self.lastY:
+            return (0, self.lastX)
+        elif self.firstY < lineNumber < self.lastY:
+            return (0, len(self.lines[lineNumber]))
+        else:
+            return None
 
     def startSelecting(self):
         # Starts selecting text.
         self.isSelecting = True
-        self.activeSelection.startX, self.activeSelection.startY = self.cursorX, self.cursorY
+        self.startX, self.startY = self.cursorX, self.cursorY
 
     def stopSelecting(self):
         # Stops selecting text.
         self.isSelecting = False
-        self.activeSelection.startX, self.activeSelection.startY = self.cursorX, self.cursorY
+        self.startX, self.startY = self.cursorX, self.cursorY
+
+    def toggleSelect(self):
+        # Toggles whether the buffer is selecting text.
+        self.isSelecting = not self.isSelecting
+        if not self.isSelecting:
+            self.startX, self.startY = self.cursorX, self.cursorY
 
     def cursorBufferBegin(self, amount=1):
         # Moves the cursor to the beginning of the buffer.
@@ -201,7 +236,7 @@ class Buffer:
         for i in range(amount):
             if self.cursorX < len(self.currentLine):
                 self.cursorX = len(self.currentLine)
-            elif self.cursorY < self.numberOfLines:
+            elif self.cursorY < self.numberOfLines - 1:
                 self.cursorY += 1
                 self.cursorX = len(self.currentLine)
             else:
@@ -250,27 +285,27 @@ class Buffer:
     def cursorWORDEnd(self, amount=1):
         # Moves the cursor to the end of the current/next WORD.
         for i in range(amount):
-            if self.notAtEnd:
+            if not self.isAtEnd:
                 # Skip whitespace.
-                while self.currentCharacter in Buffer.WHITESPACE and self.notAtEnd:
+                while self.currentCharacter in Buffer.WHITESPACE and not self.isAtEnd:
                     self.cursorCharacterRight()
 
                 # Move to the end of the word.
-                while self.currentCharacter not in Buffer.WHITESPACE and self.notAtEnd:
+                while self.currentCharacter not in Buffer.WHITESPACE and not self.isAtEnd:
                     self.cursorCharacterRight()
 
     def cursorWORDLeft(self, amount=1):
         # Moves the cursor left one WORD.
         for i in range(amount):
-            if self.notAtBeginning:
-                #self.cursorCharacterLeft()
+            if not self.isAtBeginning:
+                self.cursorCharacterLeft()
 
                 # Skip whitespace.
-                while self.notAtBeginning and self.previousCharacter not in Buffer.WHITESPACE:
+                while not self.isAtBeginning and self.currentCharacter in Buffer.WHITESPACE:
                     self.cursorCharacterLeft()
 
                 # Move to the beginning of the WORD.
-                while self.previousCharacter not in Buffer.WHITESPACE and self.notAtBeginning:
+                while not self.isAtBeginning and self.previousCharacter not in Buffer.WHITESPACE and not self.isAtBeginning:
                     self.cursorCharacterLeft()
             else:
                 break
@@ -278,31 +313,31 @@ class Buffer:
     def cursorWORDRight(self, amount=1):
         # Moves the cursor right one WORD.
         for i in range(amount):
-            if self.notAtEnd:
+            if not self.isAtEnd:
                 # Move to the end of the WORD.
-                while self.currentCharacter not in Buffer.WHITESPACE and self.notAtEnd:
+                while self.currentCharacter not in Buffer.WHITESPACE and not self.isAtEnd:
                     self.cursorCharacterRight()
 
                 # Skip whitespace.
-                while self.currentCharacter in Buffer.WHITESPACE and self.notAtEnd:
+                while self.currentCharacter in Buffer.WHITESPACE and not self.isAtEnd:
                     self.cursorCharacterRight()
             else:
                 break
 
     def delete(self, amount=1):
-        # Deletes the text in the active selection.
+        # Deletes the text in the selection.
         for i in range(amount):
-            if self.isSelecting and self.activeSelection.width > 0:
-                if self.activeSelection.height > 1:
-                    self._deleteTextInLine(self.activeSelection.firstY, self.activeSelection.firstX, len(self.lines[self.activeSelection.firstY]))
-                    for i in range(self.activeSelection.firstY + 1, self.activeSelection.lastY - 1):
-                        self._deleteLine(self.activeSelection.firstY + 1)
-                    self.currentLine += self.lines[self.cursorY + 1][self.activeSelection.lastX:]
-                    self._deleteLine(self.activeSelection.lastY)
+            if self.isSelecting:
+                if self.selectionHeight > 1:
+                    lastLine = self.lines[self.lastY][self.lastX:]
+                    self._deleteTextInLine(self.firstY, self.firstX, len(self.lines[self.firstY]))
+                    self.lines[self.firstY] += lastLine
+                    for i in range(self.firstY + 1, self.lastY + 1):
+                        self._deleteLine(self.firstY + 1)
                 else:
-                    self._deleteTextInLine(self.activeSelection.firstY, self.activeSelection.firstX, self.activeSelection.lastX)
+                    self._deleteTextInLine(self.firstY, self.firstX, self.lastX)
 
-                self.cursorX, self.cursorY = self.activeSelection.firstX, min(self.activeSelection.firstY, self.numberOfLines - 1)
+                self.cursorX, self.cursorY = self.firstX, min(self.firstY, self.numberOfLines - 1)
                 self.stopSelecting()
                 self.hasUnsavedChanges = True
             else:
@@ -313,9 +348,21 @@ class Buffer:
         for i in range(amount):
             if self.isSelecting:
                 self.delete()
-            elif self.notAtBeginning:
+            elif not self.isAtBeginning:
                 self.startSelecting()
                 self.cursorCharacterLeft()
+                self.delete()
+            else:
+                break
+
+    def deleteCharacterRight(self, amount=1):
+        # Deletes one character to the right.
+        for i in range(amount):
+            if self.isSelecting:
+                self.delete()
+            elif not self.isAtEnd:
+                self.startSelecting()
+                self.cursorCharacterRight()
                 self.delete()
             else:
                 break
@@ -323,9 +370,11 @@ class Buffer:
     def deleteLine(self, amount=1):
         # Deletes the current line.
         for i in range(amount):
-            self.stopSelecting()
-            if self.numberOfLines > 1:
+            if self.isSelecting:
+                self.delete()
+            elif self.numberOfLines > 1:
                 self._deleteLine(self.cursorY)
+                self.cursorX = 0
                 self.hasUnsavedChanges = True
             elif self.currentLine:
                 self.currentLine = ""
@@ -333,19 +382,6 @@ class Buffer:
                 self.hasUnsavedChanges = True
             else:
                 break
-
-    def splitLine(self, amount=1):
-        # Splits the current line at the cursor.
-        for i in range(amount):
-            if self.isSelecting:
-                self.delete()
-            else:
-                text = self.currentLine[self.cursorX:] if self.cursorX < len(self.currentLine) else ""
-                self.currentLine = self.currentLine[:self.cursorX]
-                self.insertLineBelow()
-                self.currentLine = text
-                self.cursorX = 0
-                self.uasUnsavedChanges = True
 
     def insert(self, text, amount=1):
         # Inserts the given text at the cursor.
@@ -357,16 +393,33 @@ class Buffer:
 
     def insertLineAbove(self, amount=1):
         # Inserts a line above the cursor.
-        for i in range(amount):
-            self.stopSelecting()
-            self._insertLine(self.cursorY)
-            self.hasUnsavedChanges = True
+        if self.allowNewLines:
+            for i in range(amount):
+                self.stopSelecting()
+                self._insertLine(self.cursorY)
+                self.cursorX = 0
+                self.hasUnsavedChanges = True
 
     def insertLineBelow(self, amount=1):
         # Inserts a line below the cursor.
-        for i in range(amount):
-            self.stopSelecting()
-            self.cursorY += 1
-            self._insertLine(self.cursorY)
-            self.hasUnsavedChanges = True
+        if self.allowNewLines:
+            for i in range(amount):
+                self.stopSelecting()
+                self.cursorX = 0
+                self.cursorY += 1
+                self._insertLine(self.cursorY)
+                self.hasUnsavedChanges = True
+
+    def splitLine(self, amount=1):
+        # Splits the current line at the cursor.
+        if self.allowNewLines:
+            for i in range(amount):
+                if self.isSelecting:
+                    self.delete()
+                text = self.currentLine[self.cursorX:] if self.cursorX < len(self.currentLine) else ""
+                self.currentLine = self.currentLine[:self.cursorX]
+                self.insertLineBelow()
+                self.currentLine = text
+                self.cursorX = 0
+                self.uasUnsavedChanges = True
 
