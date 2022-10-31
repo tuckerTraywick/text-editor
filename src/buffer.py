@@ -118,6 +118,11 @@ class Buffer:
         # Returns True if the cursor is at the end of the buffer.
         return self.cursorX == len(self.currentLine) and self.cursorY == self.numberOfLines - 1
 
+    @property
+    def coordinates(self):
+        # Returns a string with the x and y coordinates of the buffer.
+        return f"({self.cursorY+1}, {self.cursorX+1})"
+
     def _insertLine(self, lineNumber):
         # Inserts a new line at the given line number.
         self.lines.insert(lineNumber, "")
@@ -139,6 +144,7 @@ class Buffer:
         # Clears the contents of the buffer.
         self.lines.clear()
         self.lines += [""]
+        self.searchTerm = ""
         self._cursorX, self._cursorY = 0, 0
         self.startX, self.startY = 0, 0
         self.scrollX, self.scrollY = 0, 0
@@ -194,6 +200,10 @@ class Buffer:
         else:
             return None
 
+    def nextOccurrence(self):
+        # Returns the coordinates of the next occurrence of the search term.
+        # Returns None if no occurrence is found.
+        1
     def startSelecting(self):
         # Starts selecting text.
         self.isSelecting = True
@@ -209,6 +219,81 @@ class Buffer:
         self.isSelecting = not self.isSelecting
         if not self.isSelecting:
             self.startX, self.startY = self.cursorX, self.cursorY
+
+    def find(self, term):
+        # Changes the search pattern to the given term.
+        self.stopSelecting()
+        self.searchTerm = term
+        self.previousX, self.previousY = self.cursorX, self.cursorY
+        if self.currentLine.find(term, self.cursorX) != self.cursorX:
+            self.cursorNextOccurrenceRight()
+
+    def cancelFind(self):
+        # Cancels the search.
+        self.searchTerm = ""
+        self.cursorX, self.cursorY = self.previousX, self.previousY
+
+    def cursorNextOccurrenceLeft(self, amount=1):
+        # Moves the cursor to the next occurrrence of the search term facing left.
+        if self.searchTerm:
+            for i in range(amount):
+                startX, startY = self.cursorX, self.cursorY
+                index = self.currentLine.rfind(self.searchTerm, 0, self.cursorX)
+                # Search from the current position.
+                while index == -1 and self.cursorY != 0:
+                    self.cursorLineUp()
+                    self.cursorX = len(self.currentLine)
+                    index = self.currentLine.rfind(self.searchTerm, 0, self.cursorX)
+
+                # Stop searching if the pattern was found.
+                if index != -1:
+                    self.cursorX = index
+                    continue
+
+                # Search from the end to the current position.
+                self.cursorBufferEnd()
+                index = self.currentLine.rfind(self.searchTerm)
+                while index == -1 and self.cursorY != startY:
+                    self.cursorLineUp()
+                    self.cursorX = len(self.currentLine)
+                    index = self.currentLine.find(self.searchTerm, 0, self.cursorX)
+
+                if index != -1:
+                    self.cursorX = index
+                else:
+                    self.cursorX, self.cursorY = startX, startY
+                    break
+
+    def cursorNextOccurrenceRight(self, amount=1):
+        # Moves the cursor to the next occurrrence of the search term facing right.
+        if self.searchTerm:
+            for i in range(amount):
+                startX, startY = self.cursorX, self.cursorY
+                index = self.currentLine.find(self.searchTerm, self.cursorX + 1)
+                # Search from the current position.
+                while index == -1 and self.cursorY != self.numberOfLines - 1:
+                    self.cursorLineDown()
+                    self.cursorX = 0
+                    index = self.currentLine.find(self.searchTerm, self.cursorX)
+
+                # Stop searching if the pattern was found.
+                if index != -1:
+                    self.cursorX = index
+                    continue
+
+                # Search from the beginning to the current position.
+                self.cursorBufferBegin()
+                index = self.currentLine.find(self.searchTerm)
+                while index == -1 and self.cursorY != startY:
+                    self.cursorLineDown()
+                    self.cursorX = 0
+                    index = self.currentLine.find(self.searchTerm, self.cursorX)
+
+                if index != -1:
+                    self.cursorX = index
+                else:
+                    self.cursorX, self.cursorY = startX, startY
+                    break
 
     def cursorBufferBegin(self, amount=1):
         # Moves the cursor to the beginning of the buffer.
@@ -373,6 +458,8 @@ class Buffer:
             if self.isSelecting:
                 self.delete()
             elif self.numberOfLines > 1:
+                if self.cursorY > 0 and self.cursorY == self.numberOfLines - 1:
+                    self.cursorY -= 1
                 self._deleteLine(self.cursorY)
                 self.cursorX = 0
                 self.hasUnsavedChanges = True
