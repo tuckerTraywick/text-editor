@@ -5,160 +5,170 @@
 
 
 #define DEFAULT_LINE_CAPACITY 100
+#define LINE_CAPACITY_INCREMENT 50
+#define DEFAULT_BUFFER_CAPACITY 100
+#define BUFFER_CAPACITY_INCREMENT 20
 
 
-// A single node in the linked list of lines.
 // Stores the text of one line.
 struct Line {
-	struct Line *previous;
-	struct Line *next;
 	char *text;
 	size_t length;
 	size_t capacity;
 };
 
 
-// A single node in the linked list of buffers.
 // Represents a buffer of text that can be edited.
 struct Buffer {
-	struct Buffer *previous;
-	struct Buffer *next;
-	struct Line *firstLine;
-	struct Line *lastLine;
-	struct Line *currentLine;
-	size_t numberOfLines;
-	size_t currentLineNumber;
+	struct Line *lines;
+	size_t length; // The number of lines in the buffer.
+	size_t capacity; // The maximum number of lines the buffer can store.
+	size_t currentLineIndex;
 	size_t cursorPosition;
 };
 
 
-static struct Buffer *firstBuffer;
-static struct Buffer *lastBuffer;
-static struct Buffer *currentBuffer;
-static size_t currentBufferIndex;
-static size_t numberOfBuffers;
+// Stores the state of the editor.
+struct Editor {
+	struct Buffer *buffers;
+	size_t numberOfBuffers;
+	size_t maxNumberOfBuffers;
+	size_t currentBufferIndex;
+};
 
 
-// Opens a new buffer and appends it to the list of buffers.
-void openBuffer() {
-	// Allocate and initialize a new buffer and the first line of that buffer.
-	char *text = malloc((sizeof *text)*DEFAULT_LINE_CAPACITY);
-	struct Line *firstLine = malloc(sizeof *firstLine);
-	struct Buffer *newBuffer = malloc(sizeof *newBuffer);
-	assert(text != NULL && firstLine != NULL && newBuffer != NULL);
-	*firstLine = (struct Line) {
+// Initializes a Line and allocates memory for its text.
+void initializeLine(struct Line *line) {
+	char *text = malloc((sizeof *text)*(DEFAULT_LINE_CAPACITY + 1));
+	assert(text != NULL);
+	text[0] = '\0';
+	*line = (struct Line) {
 		.text = text,
 		.capacity = DEFAULT_LINE_CAPACITY,
 	};
-	*newBuffer = (struct Buffer) {
-		.firstLine = firstLine,
-		.lastLine = firstLine,
-		.numberOfLines = 1,
-		.currentLine = firstLine,
-		.currentLineNumber = 0,
-		.cursorPosition = 0,
+}
+
+
+// Destroys a Line and frees its text.
+void destroyLine(struct Line *line) {
+	free(line->text);
+	line->text = NULL;
+}
+
+
+// Prints the contents of `line` to the console.
+void printLine(struct Line line) {
+	assert(line.text != NULL);
+	fputs(line.text, stdout);
+}
+
+
+// Initializes a Buffer and allocates memory for its lines.
+void initializeBuffer(struct Buffer *buffer) {
+	struct Line *lines = malloc((sizeof *lines)*DEFAULT_BUFFER_CAPACITY);
+	assert(lines != NULL);
+	*buffer = (struct Buffer) {
+		.lines = lines,
+		.capacity = DEFAULT_BUFFER_CAPACITY,
 	};
-
-	// Append the new buffer to the list of buffers.
-	if (numberOfBuffers == 0) {
-		firstBuffer = newBuffer;
-		lastBuffer = newBuffer;
-	} else {
-		lastBuffer->next = newBuffer;
-		newBuffer->previous = lastBuffer;
-	}
 }
 
 
-// Clears the text of the current buffer and frees most of its memory.
-void clearBuffer(struct Buffer *buffer) {
-	assert(buffer != NULL);
-	// Free each line.
-	struct Line *currentLine = buffer->firstLine;
-	while (currentLine != NULL) {
-		struct Line *nextLine = currentLine->next;
-		free(currentLine->text);
-		free(currentLine);
-		currentLine = nextLine;
-	}
-	*buffer = (struct Buffer) {};
-}
-
-
-// Frees a buffer's memory.
+// Destroys a Buffer and frees its lines.
 void destroyBuffer(struct Buffer *buffer) {
-	clearBuffer(buffer);
-	free(buffer);
+	for (size_t i = 0; i < buffer->length; ++i)
+		destroyLine(&buffer->lines[i]);
+	free(buffer->lines);
+	buffer->lines = NULL;
 }
 
 
-// Closes the current buffer and removes it from the list of buffers.
-void closeBuffer() {
-	if (numberOfBuffers == 0) {
-		return;
-	} else if (currentBuffer->previous == NULL) {
-		firstBuffer = currentBuffer->next;
-		destroyBuffer(currentBuffer);
-		currentBuffer = firstBuffer;
-	} else if (currentBuffer->next == NULL) {
-		lastBuffer = currentBuffer->previous;
-		destroyBuffer(currentBuffer);
-		currentBuffer = lastBuffer;
+// Appends a new line containing the text of `lineText` to `buffer`.
+void appendLineToBuffer(struct Buffer *buffer, struct Line line) {
+	if (buffer->length < buffer->capacity) {
+		buffer->lines[buffer->length] = line;
 	} else {
-		struct Buffer *bufferToDestroy = currentBuffer;
-		currentBuffer->previous->next = currentBuffer->next->next;
-		currentBuffer->next->previous = currentBuffer->previous;
-		currentBuffer = currentBuffer->next;
-		destroyBuffer(currentBuffer);
+		buffer->capacity += BUFFER_CAPACITY_INCREMENT;
+		buffer->lines = realloc(buffer->lines, buffer->capacity);
+		assert(buffer->lines);
 	}
+	++buffer->length;
 }
 
 
-// Closes all buffers.
-void closeAllBuffers() {
-	while (currentBuffer != NULL)
-		closeBuffer();
-}
-
-
-// Reads the file at `path` into the current buffer.
-void readFromFile(char *path) {
-	FILE *file = fopen(path, "r+");
+// Reads the contents of the file at `path` into `buffer` line by line.
+void readFileIntoBuffer(struct Buffer *buffer, char *path) {
+	destroyBuffer(buffer);
+	initializeBuffer(buffer);
+	FILE *file = fopen(path, "r+"); // r+ to check that the file can be written to.
 	assert(file != NULL);
-	assert(currentBuffer != NULL);
-	clearBuffer(currentBuffer);
+	char *lineText = NULL;
+	ssize_t lineLength = 0;
+	size_t lineCapacity = 0;
+	while ((lineLength = getline(&lineText, &lineCapacity, file)) >= 0) {
+		if (lineText[lineLength - 1] == '\n') {
+			lineText[lineLength] = '\0';
+			lineLength -= 1;
+		}
+		struct Line line = {
+			.text = lineText,
+			.length = lineLength,
+			.capacity = lineCapacity,
+		};
+		appendLineToBuffer(buffer, line);
+		lineText = NULL;
+		lineLength = 0;
+		lineCapacity = 0;
+	}
+	fclose(file);
+}
 
-	// Append each line of the file to the buffer.
-	while (getline(&lineText, lineLength, file) != -1) {
-		char *text = malloc((sizeof *text)*DEFAULT_LINE_CAPACITY);
-		assert(text != NULL);
+
+// Writes the contents of `buffer` into the file at `path` line by line.
+void writeBufferToFile(struct Buffer *buffer, char *path) {
+	FILE *file = fopen(path, "w");
+	assert(file != NULL);
+	if (buffer->length != 0) {
+		for (size_t i = 0; i < buffer->length - 1; ++i) {
+			fputs(buffer->lines[i].text, file);
+			//fputc('\n', file);
+		}
+		fputs(buffer->lines[buffer->length - 1].text, file);
+	}
+	fclose(file);
+}
+
+
+// Prints the contents of `buffer` to the console.
+void printBuffer(struct Buffer *buffer) {
+	for (size_t i = 0; i < buffer->length; ++i) {
+		printLine(buffer->lines[i]);
 	}
 }
 
 
-void writeTofile(char *path);
+void initializeEditor(struct Editor *editor) {}
 
 
-void saveBuffer();
+void destroyEditor(struct Editor *editor) {}
 
 
-void saveAllBuffers();
+void draw(struct Editor *editor) {}
 
 
-// Sets up the state for the editor.
-void initialize() {
-	openBuffer();
-}
-
-
-void cleanup() {
-	closeAllBuffers();
-}
+void processInput(struct Editor *editor) {}
 
 
 int main(void) {
-	initialize();
-	cleanup();
+	struct Buffer buffer;
+	initializeBuffer(&buffer);
+	readFileIntoBuffer(&buffer, "example.txt");
+	printBuffer(&buffer);
+	writeBufferToFile(&buffer, "example.txt");
+	readFileIntoBuffer(&buffer, "example.txt");
+	printf("----------------\n");
+	printBuffer(&buffer);
+	destroyBuffer(&buffer);
 	return 0;
 }
 
