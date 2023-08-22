@@ -1,7 +1,10 @@
+// TODO: Finish insert()
+// TODO: Finish expandLine()
 #include <assert.h>
 #include <stdlib.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <string.h>
 
 
 #define DEFAULT_LINE_CAPACITY 100
@@ -23,8 +26,8 @@ struct Buffer {
 	struct Line *lines;
 	size_t length; // The number of lines in the buffer.
 	size_t capacity; // The maximum number of lines the buffer can store.
-	size_t currentLineIndex;
-	size_t cursorPosition;
+	size_t currentLine;
+	size_t cursorIndex;
 };
 
 
@@ -63,6 +66,23 @@ void printLine(struct Line line) {
 }
 
 
+// TODO
+// Resizes `text`'s buffer to fit `capacity`.
+void expandLine(struct Line *line, size_t capacity);
+
+
+// TODO
+// Inserts `text` into the line starting at `index`.
+void insert(struct Line *line, char *text, size_t length, size_t index) {
+	if (line->capacity < line->length + length) {
+		expandLine(line, line->capacity - line->length + length);
+	} else {
+		memmove(line->text + index + length, line->text + index, length);
+		memcpy(line->text + index, text, length);
+	}
+}
+
+
 // Initializes a Buffer and allocates memory for its lines.
 void initializeBuffer(struct Buffer *buffer) {
 	struct Line *lines = malloc((sizeof *lines)*DEFAULT_BUFFER_CAPACITY);
@@ -98,13 +118,16 @@ void appendLineToBuffer(struct Buffer *buffer, struct Line line) {
 
 // Reads the contents of the file at `path` into `buffer` line by line.
 void readFileIntoBuffer(struct Buffer *buffer, char *path) {
+	// Make sure the buffer is empty.
 	destroyBuffer(buffer);
 	initializeBuffer(buffer);
+	// Open the file.
 	FILE *file = fopen(path, "r+"); // r+ to check that the file can be written to.
 	assert(file != NULL);
 	char *lineText = NULL;
 	ssize_t lineLength = 0;
 	size_t lineCapacity = 0;
+	// Loop through each line and append it to the buffer.
 	while ((lineLength = getline(&lineText, &lineCapacity, file)) >= 0) {
 		if (lineText[lineLength - 1] == '\n') {
 			lineText[lineLength] = '\0';
@@ -147,6 +170,42 @@ void printBuffer(struct Buffer *buffer) {
 }
 
 
+// Returns a pointer to the line the `buffer`'s cursor is on.
+struct Line *currentLine(struct Buffer *buffer) {
+	return &buffer->lines[buffer->currentLine];
+}
+
+
+// Inserts `text` to the left of `buffer`'s cursor.
+void insertBeforeCursor(struct Buffer *buffer, char *text, size_t length) {
+	insert(currentLine(buffer), text, length, buffer->cursorIndex);
+}
+
+
+void deleteBeforeCursor(struct Buffer *buffer, size_t amount);
+
+
+void deleteAfterCursor(struct Buffer *buffer, size_t amount);
+
+
+void cursorLineUp(struct Buffer *buffer, size_t amount) {}
+
+
+void cursorLineDown(struct Buffer *buffer, size_t amount) {}
+
+
+void cursorCharacterLeft(struct Buffer *buffer, size_t amount) {}
+
+
+void cursorCharacterRight(struct Buffer *buffer, size_t amount) {}
+
+
+void cursorWordLeft(struct Buffer *buffer, size_t amount) {}
+
+
+void cursorWordRight(struct Buffer *buffer, size_t amount) {}
+
+
 void initializeEditor(struct Editor *editor) {}
 
 
@@ -162,11 +221,6 @@ void processInput(struct Editor *editor) {}
 int main(void) {
 	struct Buffer buffer;
 	initializeBuffer(&buffer);
-	readFileIntoBuffer(&buffer, "example.txt");
-	printBuffer(&buffer);
-	writeBufferToFile(&buffer, "example.txt");
-	readFileIntoBuffer(&buffer, "example.txt");
-	printf("----------------\n");
 	printBuffer(&buffer);
 	destroyBuffer(&buffer);
 	return 0;
