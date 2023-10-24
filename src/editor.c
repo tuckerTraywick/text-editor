@@ -1,5 +1,3 @@
-// TODO: Finish insert()
-// TODO: Finish expandLine()
 #include <assert.h>
 #include <stdlib.h>
 #include <stddef.h>
@@ -11,6 +9,7 @@
 #define LINE_CAPACITY_INCREMENT 50
 #define DEFAULT_BUFFER_CAPACITY 100
 #define BUFFER_CAPACITY_INCREMENT 20
+#define DEFAULT_MAX_BUFFERS 10
 
 
 // Stores the text of one line.
@@ -66,20 +65,26 @@ void printLine(struct Line line) {
 }
 
 
-// TODO
 // Resizes `text`'s buffer to fit `capacity`.
-void expandLine(struct Line *line, size_t capacity);
+void expandLine(struct Line *line, size_t capacity) {
+	assert(capacity != 0);
+	if (capacity != line->capacity) {
+		char *newString = realloc(line->text, capacity);
+		assert(newString != NULL);
+		line->text = newString;
+		line->capacity = capacity;
+	}
+}
 
 
-// TODO
 // Inserts `text` into the line starting at `index`.
 void insert(struct Line *line, char *text, size_t length, size_t index) {
-	if (line->capacity < line->length + length) {
+	printf("length: %lu, index: %lu\n", line->length, index);
+	assert(index <= line->length);
+	if (line->capacity < line->length + length)
 		expandLine(line, line->capacity - line->length + length);
-	} else {
-		memmove(line->text + index + length, line->text + index, length);
-		memcpy(line->text + index, text, length);
-	}
+	memmove(line->text + index + length, line->text + index + 1, length);
+	memcpy(line->text + index, text, length);
 }
 
 
@@ -87,8 +92,10 @@ void insert(struct Line *line, char *text, size_t length, size_t index) {
 void initializeBuffer(struct Buffer *buffer) {
 	struct Line *lines = malloc((sizeof *lines)*DEFAULT_BUFFER_CAPACITY);
 	assert(lines != NULL);
+	initializeLine(lines);
 	*buffer = (struct Buffer) {
 		.lines = lines,
+		.length = 1,
 		.capacity = DEFAULT_BUFFER_CAPACITY,
 	};
 }
@@ -129,10 +136,9 @@ void readFileIntoBuffer(struct Buffer *buffer, char *path) {
 	size_t lineCapacity = 0;
 	// Loop through each line and append it to the buffer.
 	while ((lineLength = getline(&lineText, &lineCapacity, file)) >= 0) {
-		if (lineText[lineLength - 1] == '\n') {
-			lineText[lineLength] = '\0';
-			lineLength -= 1;
-		}
+		// TODO: Do I need to check the line length here? Or is there always a \n?
+		lineLength -= 1;
+		lineText[lineLength] = '\0';
 		struct Line line = {
 			.text = lineText,
 			.length = lineLength,
@@ -152,10 +158,8 @@ void writeBufferToFile(struct Buffer *buffer, char *path) {
 	FILE *file = fopen(path, "w");
 	assert(file != NULL);
 	if (buffer->length != 0) {
-		for (size_t i = 0; i < buffer->length - 1; ++i) {
+		for (size_t i = 0; i < buffer->length - 1; ++i)
 			fputs(buffer->lines[i].text, file);
-			//fputc('\n', file);
-		}
 		fputs(buffer->lines[buffer->length - 1].text, file);
 	}
 	fclose(file);
@@ -164,9 +168,11 @@ void writeBufferToFile(struct Buffer *buffer, char *path) {
 
 // Prints the contents of `buffer` to the console.
 void printBuffer(struct Buffer *buffer) {
-	for (size_t i = 0; i < buffer->length; ++i) {
+	for (size_t i = 0; i < buffer->length - 1; ++i) {
 		printLine(buffer->lines[i]);
+		printf("\n");
 	}
+	printLine(buffer->lines[buffer->length - 1]);
 }
 
 
@@ -206,7 +212,10 @@ void cursorWordLeft(struct Buffer *buffer, size_t amount) {}
 void cursorWordRight(struct Buffer *buffer, size_t amount) {}
 
 
-void initializeEditor(struct Editor *editor) {}
+void initializeEditor(struct Editor *editor) {
+	editor->buffers = malloc((sizeof *editor->buffers)*DEFAULT_MAX_BUFFERS);
+	initializeBuffer(editor->buffers);
+}
 
 
 void destroyEditor(struct Editor *editor) {}
@@ -219,10 +228,9 @@ void processInput(struct Editor *editor) {}
 
 
 int main(void) {
-	struct Buffer buffer;
-	initializeBuffer(&buffer);
-	printBuffer(&buffer);
-	destroyBuffer(&buffer);
+	struct Editor editor;
+	initializeEditor(&editor);
+	destroyEditor(&editor);
 	return 0;
 }
 
