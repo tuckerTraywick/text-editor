@@ -4,7 +4,6 @@
 #include <stdio.h>
 #include <string.h>
 
-
 #define DEFAULT_LINE_CAPACITY 100
 #define LINE_CAPACITY_INCREMENT 50
 #define DEFAULT_BUFFER_CAPACITY 100
