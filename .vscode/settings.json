@@ -1,0 +1,10 @@
+{
+    "makefile.launchConfigurations": [
+        {
+            "cwd": "/home/tucker/Documents/code/text-editor/binary",
+            "binaryPath": "/home/tucker/Documents/code/text-editor/binary/test",
+            "binaryArgs": []
+        }
+    ],
+    "C_Cpp.errorSquiggles": "disabled"
+}
