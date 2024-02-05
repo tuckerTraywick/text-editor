@@ -2,7 +2,7 @@
 clear
 echo "---- BUILDING ----"
 make clean
-make
+make keylogger
 echo ""
 echo "---- RUNNING ----"
-binary/run
+binary/runkeylogger

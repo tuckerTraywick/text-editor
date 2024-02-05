@@ -8,15 +8,19 @@ int main(void) {
 	nonl();
 	noecho();
 
-	char ch;
+    printw("Press Shift+q to quit.\nPress Shift+c to clear the screen.\n");
+	char ch = getch();
+    clear();
+    refresh();
+
 	do {
-		ch = getch();
 		printw("name: %s   value: %d\n", keyname(ch), ch);
 		if (ch == 'C') {
 			clear();
 			refresh();
 		}
-	} while (ch != 'q');
+		ch = getch();
+	} while (ch != 'Q');
 
 	endwin();
 	return 0;
