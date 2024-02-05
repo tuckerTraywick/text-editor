@@ -4,8 +4,8 @@
 #include <stddef.h>
 
 struct List {
-    size_t length;
     size_t capacity;
+    size_t length;
     size_t elementSize;
     void *elements;
 };
