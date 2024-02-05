@@ -1,29 +1,24 @@
+INCLUDE := -Iinclude
 LIBRARIES := -lncurses
 CFLAGS := -g3 -Wall -pedantic -std=c99
 VALGRIND_FLAGS := --leak-check=yes
 CC := gcc
 
-default: binary/runeditor binary/runkeylogger
+default: binary/run
 
-editor: binary/runeditor
-
-keylogger: binary/runkeylogger
-
-binary/runeditor: build/editor.o
+binary/run: build/editor.o build/list.o
 	@mkdir -p ./binary
-	@$(CC) $(CFLAGS) $(LIBRARIES) $^ -o $@
+	@$(CC) $(CFLAGS) $(INCLUDE) $(LIBRARIES) $^ -o $@
 
-build/editor.o: source/editor.c
+build/%.o: source/%.c
 	@mkdir -p ./build
-	@$(CC) $(CFLAGS) $(LIBRARIES) -c $^ -o $@
+	@$(CC) $(CFLAGS) $(INCLUDE) $(LIBRARIES) -c $^ -o $@
 
-binary/runkeylogger: build/keylogger.o
-	@mkdir -p ./binary
-	@$(CC) $(CFLAGS) $(LIBRARIES) $^ -o $@
+source/editor.c: list.h
 
-build/keylogger.o: source/keylogger.c
-	@mkdir -p ./build
-	@$(CC) $(CFLAGS) $(LIBRARIES) -c $^ -o $@
+source/list.c: list.h
+
+list.h:
 
 .PHONY: clean
 clean:
