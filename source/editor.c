@@ -5,7 +5,7 @@ int main(void) {
 	initscr();
 	raw();
 	keypad(stdscr, TRUE);
-	nonl();
+	// nonl();
 	noecho();
 
 	
