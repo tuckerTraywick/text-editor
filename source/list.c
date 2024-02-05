@@ -1,8 +1,20 @@
+#include <assert.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include "list.h"
 
-struct List listCreate(size_t capacity, size_t elementSize);
+struct List listCreate(size_t capacity, size_t elementSize) {
+    assert(elementSize <= capacity);
+    
+    void *elements = malloc(capacity*elementSize);
+    assert(elements && "`malloc()` failed.");
+    return (struct List) {
+        .capacity = capacity,
+        .length = 0,
+        .elementSize = elementSize,
+        .elements = elements,
+    };
+}
 
 void listDestroy(struct List *list);
 
