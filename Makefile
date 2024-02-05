@@ -1,5 +1,5 @@
 LIBRARIES := -lncurses
-CFLAGS := -g3 -Wall -pedantic -std=c17
+CFLAGS := -g3 -Wall -pedantic -std=c99
 VALGRIND_FLAGS := --leak-check=yes
 CC := gcc
 
