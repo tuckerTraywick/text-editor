@@ -5,10 +5,11 @@
 #include "list.h"
 
 static void listRealloc(struct List *list) {
-    if (list->length == list->capacity) {
+    if (list->length >= list->capacity) {
         list->capacity *= 2;
     } else if (list->length <= list->capacity/2) {
-        // Leave half of the gap between the length and the current capacity for future expansion.
+        // Leave half of the gap between the last element and the end of the buffer for future
+        // expansion.
         list->capacity -= (list->capacity - list->length)/2;
     }
     void *newElements = realloc(list->elements, list->elementSize*list->capacity);
@@ -18,8 +19,6 @@ static void listRealloc(struct List *list) {
 }
 
 struct List listCreate(size_t capacity, size_t elementSize) {
-    assert(elementSize <= capacity);
-    
     void *elements = malloc(elementSize*capacity);
     // TODO: Handle failed `malloc()`.
     assert(elements && "`malloc()` failed.");
@@ -58,7 +57,7 @@ void listSwap(struct List *list, size_t indexA, size_t indexB) {
     assert(indexA < list->length && "`indexA` out of bounds.");
     assert(indexB < list->length && "`indexB` out of bounds.");
 
-    // *temp = *list[indexA]; *list[indexA] = *list[indexB]; *list[indexB] = *temp;
+    // Equivalent to: `*temp = *list[indexA]; *list[indexA] = *list[indexB]; *list[indexB] = *temp;`
     void *temp = malloc(list->elementSize);
     // TODO: Handle failed `malloc()`.
     assert(temp && "`malloc()` failed.");
@@ -74,6 +73,7 @@ void listInsert(struct List *list, size_t index, void *element) {
     assert(list->length <= list->capacity && "Length incremented too much.");
 
     listRealloc(list);
+    // Shift the elements starting at `index` one to the right to make room for the new element.
     memmove(
         (char*)list->elements + list->elementSize*(index + 1),
         (char*)list->elements + list->elementSize*index,
@@ -96,6 +96,7 @@ void listRemove(struct List *list, size_t index) {
     assert(list);
     assert(index < list->length && "Index out of bounds.");
 
+    // Shift the elements starting at `index` one to the left.
     memmove(
         (char*)list->elements + list->elementSize*index,
         (char*)list->elements + list->elementSize*(index + 1),
