@@ -68,7 +68,8 @@ static void bufferReadFile(FILE *file, struct Buffer *buffer) {
 		// TODO: Handle failed `getline()`.
 		assert(line.text && "`getline()` failed.");
 		
-		if (line.length == -1) { // Reached the end of the file.
+		if (line.length == -1) {
+			// Reached the end of the file.
 			return;
 		}
 
