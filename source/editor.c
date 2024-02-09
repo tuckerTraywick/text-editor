@@ -1,10 +1,12 @@
 #define _POSIX_C_SOURCE 200809L // For `getline()`.
 #include <assert.h>
 #include <stddef.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <ncurses.h>
 
+#define ESC 27
 #define LINE_INITIAL_CAPACITY 200
 #define BUFFER_INITIAL_CAPACITY 200
 
@@ -30,6 +32,11 @@ struct Cursor {
 	size_t x; // The index of the column the cursor points to.
 };
 
+// Represents what mode the editor is in.
+enum EditorMode {
+	NORMAL, INSERT,
+};
+
 // Represents the state of the text editor.
 struct Editor {
 	char *filePath; // The path of the file being edited.
@@ -37,6 +44,9 @@ struct Editor {
 	size_t scrollX; // The character the screen starts at.
 	struct Buffer buffer; // The buffer being edited.
 	struct Cursor cursor; // The cursor the user controls.
+	enum EditorMode mode; // What mode the editor is in.
+	bool keepRunning; // Flag to keep running.
+	bool hasUnsavedChanges; // Whether the buffer has unsaved changes.
 };
 
 // Returns a new line.
@@ -135,7 +145,12 @@ void bufferReadFile(struct Buffer *buffer, FILE *file) {
 
 // Returns a new editor.
 struct Editor editorCreate(void) {
-	return (struct Editor){.buffer = bufferCreate()};
+	return (struct Editor){
+		.filePath = "untitled",
+		.buffer = bufferCreate(),
+		.keepRunning = true,
+		.hasUnsavedChanges = true,
+	};
 }
 
 // Destroys `editor` and zeros its memory.
@@ -151,9 +166,11 @@ void editorLoadFile(struct Editor *editor, char *path) {
 	assert(editor);
 	assert(path);
 
+	// TODO: Check if editor has unsaved changes before loading the file.
 	FILE *file = fopen(path, "r");
 	assert(file && "`fopen()` failed."); // Handle failed `fopen()`.
 	editor->filePath = path;
+	editor->hasUnsavedChanges = false;
 	bufferReadFile(&editor->buffer, file);
 	fclose(file);
 }
@@ -177,7 +194,13 @@ void editorDrawStatusBar(struct Editor *editor) {
 	for (size_t y = 0; y < LINES - linesOnScreen - 1; ++y) {
 		printw("\n");
 	}
-	printw(editor->filePath);
+	
+	static char *modes[] = {
+		[NORMAL] = "NORMAL",
+		[INSERT] = "INSERT",
+	};
+	char star = (editor->hasUnsavedChanges) ? '*' : ' ';
+	printw("%s %c%s", modes[editor->mode], star, editor->filePath);
 }
 
 // Draws the cursor.
@@ -200,6 +223,36 @@ void editorDraw(struct Editor *editor) {
 	refresh();
 }
 
+// Processes a keypress and updates the editor's state.
+void editorProcessKeypress(struct Editor *editor) {
+	assert(editor);
+
+	int ch = getch();
+	switch (editor->mode) {
+		case NORMAL:
+			switch (ch) {
+				case 'i':
+					editor->mode = INSERT;
+					break;
+				case 'q':
+					editor->keepRunning = false;
+					break;	
+			}
+			break;
+			
+		case INSERT:
+			switch (ch) {
+				case 'q':
+					editor->keepRunning = false;
+					break;
+				case ESC:
+					editor->mode = NORMAL;
+					break;
+			}
+			break;
+	}
+}
+
 // Runs the main event loop.
 void editorRun(struct Editor *editor) {
 	assert(editor);
@@ -207,18 +260,21 @@ void editorRun(struct Editor *editor) {
 	initscr();
 	raw();
 	keypad(stdscr, TRUE);
+	set_escdelay(0);
 	noecho();
-	nonl();
+	// nonl();
 
-	editorDraw(editor);	
-	getch();
+	while (editor->keepRunning) {
+		editorDraw(editor);
+		editorProcessKeypress(editor);
+	}
 
 	endwin();
 }
 
 int main(void) {
 	struct Editor editor = editorCreate();
-	editorLoadFile(&editor, "example.txt");
+	// editorLoadFile(&editor, "example.txt");
 	editorRun(&editor);
 
 	editorDestroy(&editor);
