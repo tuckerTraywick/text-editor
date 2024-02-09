@@ -4,74 +4,110 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <ncurses.h>
-#include "list.h"
 
-// Represents a line in a buffer. Must be destroyed with `lineDestroy()`.
+#define LINE_INITIAL_CAPACITY 200
+#define BUFFER_INITIAL_CAPACITY 200
+
+// Represents a line in a buffer.
 struct Line {
-	size_t capacity; // The number of characters allocated for the line including the '\0'.
-	size_t length; // The current number of characters in the line, excluding the '\0'.
-	char *text; // The text of the line. Does not include '\n', but does include a '\0'.
+	size_t capacity; // The maximum length of the line.
+	size_t length; // The current length of the line.
+	char *text; // The buffer that holds the text of the line.
 };
-typedef struct List LineList;
 
 // Represents an open file in the editor.
 struct Buffer {
-	LineList lines; // The lines of the buffer.
+	size_t capacity; // The maximum number of lines.
+	size_t length; // The current number of lines.
+	struct Line *lines; // The buffer that holds the lines.
 };
-typedef struct List BufferList;
 
-// Represents a selection of text being edited.
+// Represents the cursor the user controls.
 struct Cursor {
-	size_t startY; // The first (lowest index) line selected by the cursor.
-	size_t startX; // The first character of the first line selected by the cursor.
-	size_t endY; // The last (highest index) line selected by the cursor.
-	size_t endX; // The last character of the last line selected by the cursor.
+	size_t y; // The index of the row the cursor points to.
+	size_t x; // The index of the column the cursor points to.
 };
-typedef struct List CursorList;
-
-// Represents a tab in the editor. Stores all of the information the editor needs to know about a
-// buffer.
-struct Tab {
-	char *name; // The name of the tab in the tab list.
-	size_t scrollY; // The line number the screen starts at.
-	size_t scrollX; // The character the screen starts at.
-	struct Buffer buffer; // The buffer being edited in the tab.
-	CursorList cursors; // The cursors in the tab.
-	size_t mainCursorIndex; // The index of the main cursor the user is controlling.
-};
-typedef struct List TabList;
 
 // Represents the state of the text editor.
 struct Editor {
-	TabList tabs; // The open tabs.
-	size_t currentTabIndex; // The index of the currently focused tab.
+	char *filePath; // The path of the file being edited.
+	size_t scrollY; // The line number the screen starts at.
+	size_t scrollX; // The character the screen starts at.
+	struct Buffer buffer; // The buffer being edited.
+	struct Cursor cursor; // The cursor the user controls.
 };
+
+// Returns a new line.
+struct Line lineCreate(void) {
+	char *text = malloc(LINE_INITIAL_CAPACITY);
+	assert(text && "`malloc()` failed."); // TODO: Handle failed `malloc()`.
+	return (struct Line){
+		.capacity = LINE_INITIAL_CAPACITY,
+		.text = text,
+	};
+}
 
 // Destroys a line and zeros its memory.
 void lineDestroy(struct Line *line) {
+	assert(line);
+
 	free(line->text);
 	*line = (struct Line){0};
 }
 
-// Returns a new buffer. Must be destroyed with `bufferDestroy()`.
-static struct Buffer bufferCreate(void) {
-	return (struct Buffer){.lines = listCreate(1, sizeof (struct Line))};
+// Returns a new buffer.
+struct Buffer bufferCreate(void) {
+	struct Line *lines = malloc((sizeof (struct Line))*BUFFER_INITIAL_CAPACITY);
+	assert(lines && "`malloc()` failed."); // TODO: Handle failed `malloc()`.
+	lines[0] = lineCreate();
+	return (struct Buffer){
+		.capacity = BUFFER_INITIAL_CAPACITY,
+		.length = 1,
+		.lines = lines,
+	};
 }
 
-// Deallocates a buffer's lines and zeroes its memory.
-static void bufferDestroy(struct Buffer *buffer) {
-	for (size_t i = 0; i < buffer->lines.length; ++i) {
-		lineDestroy(listGet(&buffer->lines, i));
+// Destroys a buffer and zeros its memory.
+void bufferDestroy(struct Buffer *buffer) {
+	assert(buffer);
+
+	for (size_t i = 0; i < buffer->length; ++i) {
+		lineDestroy(buffer->lines + i);
 	}
-	listDestroy(&buffer->lines);
 	*buffer = (struct Buffer){0};
 }
 
-// Reads a file into a buffer.
-static void bufferReadFile(FILE *file, struct Buffer *buffer) {
+// Appends `line` to `buffer`.
+void bufferAppendLine(struct Buffer *buffer, struct Line *line) {
+	assert(buffer);
+	assert(line);
+
+	// Expand the buffer if needed.
+	if (buffer->length == buffer->capacity) {
+		buffer->capacity *= 2;
+		buffer->lines = realloc(buffer->lines, buffer->capacity);
+		assert(buffer->lines && "`realloc()` failed."); // TODO: Handle failed `realloc()`.
+	}
+	buffer->lines[buffer->length] = *line;
+	++buffer->length;
+}
+
+// Empties `buffer`. Does not change its capacity.
+void bufferClear(struct Buffer *buffer) {
+	assert(buffer);
+
+	for (size_t i = 0; i < buffer->length; ++i) {
+		lineDestroy(buffer->lines + i);
+	}
+	buffer->length = 0;
+}
+
+// Reads `file` into `buffer` line by line..
+void bufferReadFile(struct Buffer *buffer, FILE *file) {
 	assert(file);
 	assert(buffer);
 
+	bufferClear(buffer);
 	while (!feof(file)) {
 		struct Line line = {0};
 		line.length = getline(&line.text, &line.capacity, file);
@@ -86,97 +122,48 @@ static void bufferReadFile(FILE *file, struct Buffer *buffer) {
 
 		// Remove the '\n' if necessary.
 		if (line.text[line.length - 1] == '\n') {
-			line.text[line.length - 1] = '\0';
 			--line.length;
+			line.text[line.length] = '\0';
 		}
-		listAppend(&buffer->lines, &line);
+		bufferAppendLine(buffer, &line);
 	}
 }
 
-// Returns a new tab. Must be destroyed with `tabDestroy()`.
-struct Tab tabCreate(char *name) {
-	assert(name);
+// Prints the lines of `buffer`.
+void bufferPrint(struct Buffer *buffer) {
+	assert(buffer);
 
-	CursorList cursors = listCreate(1, sizeof (struct Cursor));
-	struct Cursor cursor = {0};
-	listAppend(&cursors, &cursor);
-	return (struct Tab){
-		.name = name,
-		.buffer = bufferCreate(),
-		.cursors = cursors,
-	};
-}
-
-// Destroys a tab and zeroes its memory.
-void tabDestroy(struct Tab *tab) {
-	assert(tab);
-
-	bufferDestroy(&tab->buffer);
-	listDestroy(&tab->cursors);
-	*tab = (struct Tab){0};
+	for (size_t i = 0; i < buffer->length; ++i) {
+		printf("%.2zu %s\n", i, buffer->lines[i].text);
+	}
 }
 
 // Returns a new editor.
 struct Editor editorCreate(void) {
-	return (struct Editor){
-		.tabs = listCreate(10, sizeof (struct Tab)),
-	};
+	return (struct Editor){.buffer = bufferCreate()};
 }
 
-// Destroys an editor and zeroes its memory.
+// Destroys an editor and zeros its memory.
 void editorDestroy(struct Editor *editor) {
 	assert(editor);
 
+	bufferDestroy(&editor->buffer);
+	*editor = (struct Editor){0};
+}
 
-	listDestroy(&editor->tabs);
+// Loads the file at `path` into `editor`.
+void editorLoadFile(struct Editor *editor, char *path) {
+	FILE *file = fopen(path, "r");
+	assert(file && "`fopen()` failed."); // Handle failed `fopen()`.
+	bufferReadFile(&editor->buffer, file);
+	fclose(file);
 }
 
 int main(void) {
-	struct Tab tab = tabCreate("example.txt");
+	struct Editor editor = editorCreate();
+	editorLoadFile(&editor, "example.txt");
+	bufferPrint(&editor.buffer);
 
-
-	tabDestroy(&tab);
-
+	editorDestroy(&editor);
 	return 0;
 }
-
-// int main(void) {
-// 	FILE *file = fopen("example.txt", "r");
-// 	assert(file && "`fopen()` failed.");
-// 	struct Buffer buffer = bufferCreate();
-
-// 	bufferReadFile(file, &buffer);
-// 	printf("buffer length = %zu\n", buffer.lines.length);
-// 	for (size_t i = 0; i < buffer.lines.length; ++i) {
-// 		struct Line *line = listGet(&buffer.lines, i);
-// 		printf("%.2zu (length = %.2zu) %s\n", i + 1, line->length, line->text);
-// 	}
-
-// 	fclose(file);
-// 	bufferDestroy(&buffer);
-
-// 	return 0;
-// }
-
-// int main(void) {
-// 	struct List list = listCreate(10, sizeof(int));
-// 	int a = 1;
-// 	int b = 2;
-// 	int c = 3;
-// 	listAppend(&list, &a);
-// 	listAppend(&list, &b);
-// 	listAppend(&list, &c);
-// 	listSwap(&list, 0, 1);
-// 	int x = 7;
-// 	listSet(&list, 1, &x);
-// 	x = 100;
-// 	listInsert(&list, 2, &x);
-
-// 	for (size_t i = 0; i < list.length; ++i) {
-// 		printf("list[%zu] = %d\n", i, *(int*)listGet(&list, i));
-// 	}
-
-// 	listDestroy(&list);
-
-// 	return 0;
-// }
