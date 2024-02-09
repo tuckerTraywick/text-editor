@@ -11,7 +11,6 @@
 #define BUFFER_INITIAL_CAPACITY 200
 
 #define min(a, b) (((a) <= (b)) ? (a) : (b))
-#define max(a, b) (((a) >= (b)) ? (a) : (b))
 
 // Represents a line in a buffer.
 struct Line {
