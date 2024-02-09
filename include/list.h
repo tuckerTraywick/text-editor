@@ -33,7 +33,7 @@ void listInsert(struct List *list, size_t index, void *element);
 void listAppend(struct List *list, void *element);
 
 // Removes the element at `index`. Be sure to destroy the element if needed before calling this
-// method.
+// function.
 void listRemove(struct List *list, size_t index);
 
 #endif // LIST_H
