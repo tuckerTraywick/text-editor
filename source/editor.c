@@ -6,7 +6,7 @@
 #include <ncurses.h>
 #include "list.h"
 
-// Represents a line in a buffer.
+// Represents a line in a buffer. Must be destroyed with `lineDestroy()`.
 struct Line {
 	size_t capacity; // The number of characters allocated for the line including the '\0'.
 	size_t length; // The current number of characters in the line, excluding the '\0'.
@@ -47,6 +47,12 @@ struct Editor {
 	size_t currentTabIndex; // The index of the currently focused tab.
 };
 
+// Destroys a line and zeros its memory.
+void lineDestroy(struct Line *line) {
+	free(line->text);
+	*line = (struct Line){0};
+}
+
 // Returns a new buffer. Must be destroyed with `bufferDestroy()`.
 static struct Buffer bufferCreate(void) {
 	return (struct Buffer){.lines = listCreate(1, sizeof (struct Line))};
@@ -54,6 +60,9 @@ static struct Buffer bufferCreate(void) {
 
 // Deallocates a buffer's lines and zeroes its memory.
 static void bufferDestroy(struct Buffer *buffer) {
+	for (size_t i = 0; i < buffer->lines.length; ++i) {
+		lineDestroy(listGet(&buffer->lines, i));
+	}
 	listDestroy(&buffer->lines);
 	*buffer = (struct Buffer){0};
 }
@@ -62,47 +71,92 @@ static void bufferDestroy(struct Buffer *buffer) {
 static void bufferReadFile(FILE *file, struct Buffer *buffer) {
 	assert(file);
 	assert(buffer);
+
 	while (!feof(file)) {
 		struct Line line = {0};
 		line.length = getline(&line.text, &line.capacity, file);
 		// TODO: Handle failed `getline()`.
 		assert(line.text && "`getline()` failed.");
 		
+		// If `line.text` is not null and `getline()` returns -1, then the file ends in a trailing
+		// newline and there is no more text to read, so we can exit early.
 		if (line.length == -1) {
-			// Reached the end of the file.
 			return;
 		}
 
 		// Remove the '\n' if necessary.
 		if (line.text[line.length - 1] == '\n') {
-			line.text[line.length - 1] = '\0'; // Remove the '\n'.
+			line.text[line.length - 1] = '\0';
 			--line.length;
 		}
 		listAppend(&buffer->lines, &line);
 	}
 }
 
+// Returns a new tab. Must be destroyed with `tabDestroy()`.
+struct Tab tabCreate(char *name) {
+	assert(name);
+
+	CursorList cursors = listCreate(1, sizeof (struct Cursor));
+	struct Cursor cursor = {0};
+	listAppend(&cursors, &cursor);
+	return (struct Tab){
+		.name = name,
+		.buffer = bufferCreate(),
+		.cursors = cursors,
+	};
+}
+
+// Destroys a tab and zeroes its memory.
+void tabDestroy(struct Tab *tab) {
+	assert(tab);
+
+	bufferDestroy(&tab->buffer);
+	listDestroy(&tab->cursors);
+	*tab = (struct Tab){0};
+}
+
+// Returns a new editor.
+struct Editor editorCreate(void) {
+	return (struct Editor){
+		.tabs = listCreate(10, sizeof (struct Tab)),
+	};
+}
+
+// Destroys an editor and zeroes its memory.
+void editorDestroy(struct Editor *editor) {
+	assert(editor);
+
+
+	listDestroy(&editor->tabs);
+}
+
 int main(void) {
-	// initscr();
-	// raw();
-	// keypad(stdscr, TRUE);
-	// noecho();
+	struct Tab tab = tabCreate("example.txt");
 
-	FILE *file = fopen("example.txt", "r");
-	assert(file && "`fopen()` failed.");
-	struct Buffer buffer = bufferCreate();
-	bufferReadFile(file, &buffer);
-	printf("buffer length = %zu\n", buffer.lines.length);
-	for (size_t i = 0; i < buffer.lines.length; ++i) {
-		struct Line *line = listGet(&buffer.lines, i);
-		printf("%zu(%zu) %s\n", i, line->length, line->text);
-	}
 
-	bufferDestroy(&buffer);
+	tabDestroy(&tab);
 
-	// endwin();
 	return 0;
 }
+
+// int main(void) {
+// 	FILE *file = fopen("example.txt", "r");
+// 	assert(file && "`fopen()` failed.");
+// 	struct Buffer buffer = bufferCreate();
+
+// 	bufferReadFile(file, &buffer);
+// 	printf("buffer length = %zu\n", buffer.lines.length);
+// 	for (size_t i = 0; i < buffer.lines.length; ++i) {
+// 		struct Line *line = listGet(&buffer.lines, i);
+// 		printf("%.2zu (length = %.2zu) %s\n", i + 1, line->length, line->text);
+// 	}
+
+// 	fclose(file);
+// 	bufferDestroy(&buffer);
+
+// 	return 0;
+// }
 
 // int main(void) {
 // 	struct List list = listCreate(10, sizeof(int));
