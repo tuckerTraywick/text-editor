@@ -11,6 +11,7 @@
 #define BUFFER_INITIAL_CAPACITY 200
 
 #define min(a, b) (((a) <= (b)) ? (a) : (b))
+#define max(a, b) (((a) >= (b)) ? (a) : (b))
 
 // Represents a line in a buffer.
 struct Line {
@@ -34,7 +35,7 @@ struct Cursor {
 
 // Represents what mode the editor is in.
 enum EditorMode {
-	NORMAL, INSERT,
+	NORMAL, EDIT,
 };
 
 // Represents the state of the text editor.
@@ -197,7 +198,7 @@ void editorDrawStatusBar(struct Editor *editor) {
 	
 	static char *modes[] = {
 		[NORMAL] = "NORMAL",
-		[INSERT] = "INSERT",
+		[EDIT]   = "EDIT  ",
 	};
 	char star = (editor->hasUnsavedChanges) ? '*' : ' ';
 	printw("%s %c%s", modes[editor->mode], star, editor->filePath);
@@ -223,6 +224,60 @@ void editorDraw(struct Editor *editor) {
 	refresh();
 }
 
+struct Line *editorCurrentLine(struct Editor *editor) {
+	assert(editor);
+	
+	return editor->buffer.lines + editor->cursor.y;
+}
+
+// Moves the cursor up one line.
+void editorCursorLineUp(struct Editor *editor) {
+	assert(editor);
+
+	if (editor->cursor.y > 0) {
+		--editor->cursor.y;
+		editor->cursor.x = min(editor->cursor.x, editorCurrentLine(editor)->length);
+	} else if (editor->cursor.y == 0) {
+		editor->cursor.x = 0;
+	}
+}
+
+// Moves the down one line.
+void editorCursorLineDown(struct Editor *editor) {
+	assert(editor);
+
+	if (editor->cursor.y < editor->buffer.length - 1) {
+		++editor->cursor.y;
+		editor->cursor.x = min(editor->cursor.x, editorCurrentLine(editor)->length);
+	} else if (editor->cursor.y == editor->buffer.length - 1) {
+		editor->cursor.x = editorCurrentLine(editor)->length;
+	}
+}
+
+// Moves the cursor left one character.
+void editorCursorChracterLeft(struct Editor *editor) {
+	assert(editor);
+
+	if (editor->cursor.x > 0) {
+		--editor->cursor.x;
+	} else if (editor->cursor.y > 0) {
+		--editor->cursor.y;
+		editor->cursor.x = editorCurrentLine(editor)->length;
+	}
+}
+
+// Moves the cursor right one character.
+void editorCursorChracterRight(struct Editor *editor) {
+	assert(editor);
+
+	if (editor->cursor.x < editorCurrentLine(editor)->length) {
+		++editor->cursor.x;
+	} else if (editor->cursor.y < editor->buffer.length - 1) {
+		++editor->cursor.y;
+		editor->cursor.x = 0;
+	}
+}
+
 // Processes a keypress and updates the editor's state.
 void editorProcessKeypress(struct Editor *editor) {
 	assert(editor);
@@ -231,16 +286,32 @@ void editorProcessKeypress(struct Editor *editor) {
 	switch (editor->mode) {
 		case NORMAL:
 			switch (ch) {
-				case 'i':
-					editor->mode = INSERT;
-					break;
 				case 'q':
 					editor->keepRunning = false;
 					break;	
+				case 'e':
+					editor->mode = EDIT;
+					break;
+				case 'i':
+				case KEY_UP:
+					editorCursorLineUp(editor);
+					break;				
+				case 'k':
+				case KEY_DOWN:
+					editorCursorLineDown(editor);
+					break;
+				case 'j':
+				case KEY_LEFT:
+					editorCursorChracterLeft(editor);
+					break;
+				case 'l':
+				case KEY_RIGHT:
+					editorCursorChracterRight(editor);
+					break;
 			}
 			break;
-			
-		case INSERT:
+
+		case EDIT:
 			switch (ch) {
 				case 'q':
 					editor->keepRunning = false;
@@ -274,7 +345,7 @@ void editorRun(struct Editor *editor) {
 
 int main(void) {
 	struct Editor editor = editorCreate();
-	// editorLoadFile(&editor, "example.txt");
+	editorLoadFile(&editor, "example.txt");
 	editorRun(&editor);
 
 	editorDestroy(&editor);
