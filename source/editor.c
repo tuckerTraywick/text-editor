@@ -47,7 +47,7 @@ struct Line lineCreate(void) {
 	};
 }
 
-// Destroys a line and zeros its memory.
+// Destroys `line` and zeros its memory.
 void lineDestroy(struct Line *line) {
 	assert(line);
 
@@ -67,13 +67,14 @@ struct Buffer bufferCreate(void) {
 	};
 }
 
-// Destroys a buffer and zeros its memory.
+// Destroys `buffer` and zeros its memory.
 void bufferDestroy(struct Buffer *buffer) {
 	assert(buffer);
 
 	for (size_t i = 0; i < buffer->length; ++i) {
 		lineDestroy(buffer->lines + i);
 	}
+	free(buffer->lines);
 	*buffer = (struct Buffer){0};
 }
 
@@ -117,6 +118,7 @@ void bufferReadFile(struct Buffer *buffer, FILE *file) {
 		// If `line.text` is not null and `getline()` returns -1, then the file ends in a trailing
 		// newline and there is no more text to read, so we can exit early.
 		if (line.length == -1) {
+			free(line.text);
 			return;
 		}
 
@@ -143,7 +145,7 @@ struct Editor editorCreate(void) {
 	return (struct Editor){.buffer = bufferCreate()};
 }
 
-// Destroys an editor and zeros its memory.
+// Destroys `editor` and zeros its memory.
 void editorDestroy(struct Editor *editor) {
 	assert(editor);
 
