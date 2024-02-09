@@ -8,6 +8,8 @@
 #define LINE_INITIAL_CAPACITY 200
 #define BUFFER_INITIAL_CAPACITY 200
 
+#define min(a, b) (((a) <= (b)) ? (a) : (b))
+
 // Represents a line in a buffer.
 struct Line {
 	size_t capacity; // The maximum length of the line.
@@ -131,15 +133,6 @@ void bufferReadFile(struct Buffer *buffer, FILE *file) {
 	}
 }
 
-// Prints the lines of `buffer`.
-void bufferPrint(struct Buffer *buffer) {
-	assert(buffer);
-
-	for (size_t i = 0; i < buffer->length; ++i) {
-		printf("%.2zu %s\n", i, buffer->lines[i].text);
-	}
-}
-
 // Returns a new editor.
 struct Editor editorCreate(void) {
 	return (struct Editor){.buffer = bufferCreate()};
@@ -155,16 +148,78 @@ void editorDestroy(struct Editor *editor) {
 
 // Loads the file at `path` into `editor`.
 void editorLoadFile(struct Editor *editor, char *path) {
+	assert(editor);
+	assert(path);
+
 	FILE *file = fopen(path, "r");
 	assert(file && "`fopen()` failed."); // Handle failed `fopen()`.
+	editor->filePath = path;
 	bufferReadFile(&editor->buffer, file);
 	fclose(file);
+}
+
+// Draws the buffer.
+void editorDrawBuffer(struct Editor *editor) {
+	assert(editor);
+
+	size_t linesOnScreen = min(LINES - 1, editor->buffer.length - editor->scrollY);
+	for (size_t y = 0; y < linesOnScreen; ++y) {
+		size_t lineNumber = editor->scrollY + y + 1;
+		printw("%3.zu %s\n", lineNumber, editor->buffer.lines[y + editor->scrollY].text);
+	}
+}
+
+// Draws the status bar.
+void editorDrawStatusBar(struct Editor *editor) {
+	assert(editor);
+
+	size_t linesOnScreen = min(LINES - 1, editor->buffer.length - editor->scrollY);
+	for (size_t y = 0; y < LINES - linesOnScreen - 1; ++y) {
+		printw("\n");
+	}
+	printw(editor->filePath);
+}
+
+// Draws the cursor.
+void editorDrawCursor(struct Editor *editor) {
+	assert(editor);
+
+	int y = editor->cursor.y - editor->scrollY;
+	int x = editor->cursor.x + 4;
+	move(y, x);
+}
+
+// Draws the editor's ui.
+void editorDraw(struct Editor *editor) {
+	assert(editor);
+
+	clear();
+	editorDrawBuffer(editor);
+	editorDrawStatusBar(editor);
+	editorDrawCursor(editor);
+	refresh();
+}
+
+// Runs the main event loop.
+void editorRun(struct Editor *editor) {
+	assert(editor);
+
+	initscr();
+	raw();
+	keypad(stdscr, TRUE);
+	noecho();
+	nonl();
+
+	editorDraw(editor);	
+	getch();
+
+	endwin();
 }
 
 int main(void) {
 	struct Editor editor = editorCreate();
 	editorLoadFile(&editor, "example.txt");
-	bufferPrint(&editor.buffer);
+	editorRun(&editor);
 
 	editorDestroy(&editor);
 	return 0;
