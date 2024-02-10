@@ -11,6 +11,7 @@
 #define BUFFER_INITIAL_CAPACITY 200
 
 #define min(a, b) (((a) <= (b)) ? (a) : (b))
+#define max(a, b) (((a) >= (b)) ? (a) : (b))
 
 // Represents a line in a buffer.
 struct Line {
@@ -238,6 +239,7 @@ void editorCursorLineUp(struct Editor *editor) {
 	if (editor->cursorY > 0) {
 		--editor->cursorY;
 		editor->cursorX = min(editor->cursorX, editorCurrentLine(editor)->length);
+		editor->scrollY = min(editor->scrollY, editor->cursorY);
 	} else {
 		editor->cursorX = 0;
 	}
@@ -250,6 +252,9 @@ void editorCursorLineDown(struct Editor *editor) {
 	if (editor->cursorY < editor->buffer.length - 1) {
 		++editor->cursorY;
 		editor->cursorX = min(editor->cursorX, editorCurrentLine(editor)->length);
+		if (editor->cursorY > editor->scrollY + LINES - 2) {
+			++editor->scrollY;
+		}
 	} else {
 		editor->cursorX = editorCurrentLine(editor)->length;
 	}
