@@ -40,10 +40,11 @@ enum EditorMode {
 // Represents the state of the text editor.
 struct Editor {
 	char *filePath; // The path of the file being edited.
-	size_t scrollY; // The line number the screen starts at.
-	size_t scrollX; // The character the screen starts at.
 	struct Buffer buffer; // The buffer being edited.
-	struct Cursor cursor; // The cursor the user controls.
+	size_t cursorY; // The line the cursor points to.
+	size_t cursorX; // The character the cursor points to.
+	size_t scrollY; // The line the screen starts at.
+	size_t scrollX; // The character the screen starts at.
 	enum EditorMode mode; // What mode the editor is in.
 	bool keepRunning; // Flag to keep running.
 	bool hasUnsavedChanges; // Whether the buffer has unsaved changes.
@@ -207,8 +208,8 @@ void editorDrawStatusBar(struct Editor *editor) {
 void editorDrawCursor(struct Editor *editor) {
 	assert(editor);
 
-	int y = editor->cursor.y - editor->scrollY;
-	int x = editor->cursor.x + 4;
+	int y = editor->cursorY - editor->scrollY;
+	int x = editor->cursorX + 4;
 	move(y, x);
 }
 
@@ -223,33 +224,34 @@ void editorDraw(struct Editor *editor) {
 	refresh();
 }
 
+// Returns the line the cursor points to.
 struct Line *editorCurrentLine(struct Editor *editor) {
 	assert(editor);
 	
-	return editor->buffer.lines + editor->cursor.y;
+	return editor->buffer.lines + editor->cursorY;
 }
 
 // Moves the cursor up one line.
 void editorCursorLineUp(struct Editor *editor) {
 	assert(editor);
 
-	if (editor->cursor.y > 0) {
-		--editor->cursor.y;
-		editor->cursor.x = min(editor->cursor.x, editorCurrentLine(editor)->length);
-	} else if (editor->cursor.y == 0) {
-		editor->cursor.x = 0;
+	if (editor->cursorY > 0) {
+		--editor->cursorY;
+		editor->cursorX = min(editor->cursorX, editorCurrentLine(editor)->length);
+	} else {
+		editor->cursorX = 0;
 	}
 }
 
-// Moves the down one line.
+// Moves the cursor down one line.
 void editorCursorLineDown(struct Editor *editor) {
 	assert(editor);
 
-	if (editor->cursor.y < editor->buffer.length - 1) {
-		++editor->cursor.y;
-		editor->cursor.x = min(editor->cursor.x, editorCurrentLine(editor)->length);
-	} else if (editor->cursor.y == editor->buffer.length - 1) {
-		editor->cursor.x = editorCurrentLine(editor)->length;
+	if (editor->cursorY < editor->buffer.length - 1) {
+		++editor->cursorY;
+		editor->cursorX = min(editor->cursorX, editorCurrentLine(editor)->length);
+	} else {
+		editor->cursorX = editorCurrentLine(editor)->length;
 	}
 }
 
@@ -257,11 +259,11 @@ void editorCursorLineDown(struct Editor *editor) {
 void editorCursorChracterLeft(struct Editor *editor) {
 	assert(editor);
 
-	if (editor->cursor.x > 0) {
-		--editor->cursor.x;
-	} else if (editor->cursor.y > 0) {
-		--editor->cursor.y;
-		editor->cursor.x = editorCurrentLine(editor)->length;
+	if (editor->cursorX > 0) {
+		--editor->cursorX;
+	} else if (editor->cursorY > 0) {
+		editorCursorLineUp(editor);
+		editor->cursorX = editorCurrentLine(editor)->length;
 	}
 }
 
@@ -269,11 +271,11 @@ void editorCursorChracterLeft(struct Editor *editor) {
 void editorCursorChracterRight(struct Editor *editor) {
 	assert(editor);
 
-	if (editor->cursor.x < editorCurrentLine(editor)->length) {
-		++editor->cursor.x;
-	} else if (editor->cursor.y < editor->buffer.length - 1) {
-		++editor->cursor.y;
-		editor->cursor.x = 0;
+	if (editor->cursorX < editorCurrentLine(editor)->length) {
+		++editor->cursorX;
+	} else if (editor->cursorY < editor->buffer.length - 1) {
+		editorCursorLineDown(editor);
+		editor->cursorX = 0;
 	}
 }
 
@@ -332,7 +334,6 @@ void editorRun(struct Editor *editor) {
 	keypad(stdscr, TRUE);
 	set_escdelay(0);
 	noecho();
-	// nonl();
 
 	while (editor->keepRunning) {
 		editorDraw(editor);
