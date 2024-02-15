@@ -35,7 +35,7 @@ struct Cursor {
 
 // Represents what mode the editor is in.
 enum EditorMode {
-	NORMAL, EDIT,
+	NORMAL, INSERT,
 };
 
 // Represents the state of the text editor.
@@ -54,7 +54,8 @@ struct Editor {
 // Returns a new line.
 struct Line lineCreate(void) {
 	char *text = malloc(LINE_INITIAL_CAPACITY);
-	assert(text && "`malloc()` failed."); // TODO: Handle failed `malloc()`.
+	// TODO: Handle failed `malloc()`.
+	assert(text && "`malloc()` failed.");
 	return (struct Line){
 		.capacity = LINE_INITIAL_CAPACITY,
 		.text = text,
@@ -72,7 +73,8 @@ void lineDestroy(struct Line *line) {
 // Returns a new buffer.
 struct Buffer bufferCreate(void) {
 	struct Line *lines = malloc((sizeof (struct Line))*BUFFER_INITIAL_CAPACITY);
-	assert(lines && "`malloc()` failed."); // TODO: Handle failed `malloc()`.
+	// TODO: Handle failed `malloc()`.
+	assert(lines && "`malloc()` failed.");
 	lines[0] = lineCreate();
 	return (struct Buffer){
 		.capacity = BUFFER_INITIAL_CAPACITY,
@@ -101,7 +103,8 @@ void bufferAppendLine(struct Buffer *buffer, struct Line *line) {
 	if (buffer->length == buffer->capacity) {
 		buffer->capacity *= 2;
 		buffer->lines = realloc(buffer->lines, buffer->capacity);
-		assert(buffer->lines && "`realloc()` failed."); // TODO: Handle failed `realloc()`.
+		// TODO: Handle failed `realloc()`.
+		assert(buffer->lines && "`realloc()` failed.");
 	}
 	buffer->lines[buffer->length] = *line;
 	++buffer->length;
@@ -170,7 +173,8 @@ void editorLoadFile(struct Editor *editor, char *path) {
 
 	// TODO: Check if editor has unsaved changes before loading the file.
 	FILE *file = fopen(path, "r");
-	assert(file && "`fopen()` failed."); // Handle failed `fopen()`.
+	// TODO: Handle failed `fopen()`.
+	assert(file && "`fopen()` failed.");
 	editor->filePath = path;
 	editor->hasUnsavedChanges = false;
 	bufferReadFile(&editor->buffer, file);
@@ -199,7 +203,7 @@ void editorDrawStatusBar(struct Editor *editor) {
 	
 	static char *modes[] = {
 		[NORMAL] = "NORMAL",
-		[EDIT]   = "EDIT  ",
+		[INSERT]   = "INSERT  ",
 	};
 	char star = (editor->hasUnsavedChanges) ? '*' : ' ';
 	printw("%s %c%s", modes[editor->mode], star, editor->filePath);
@@ -230,6 +234,15 @@ struct Line *editorCurrentLine(struct Editor *editor) {
 	assert(editor);
 	
 	return editor->buffer.lines + editor->cursorY;
+}
+
+// Inserts a character at the cursor.
+void editorInsert(struct Editor *editor, char ch) {
+	assert(editor);
+	assert(' ' <= ch && ch <= '~' && "`ch` must be printable.");
+
+	struct Line *currentLine = editorCurrentLine(editor);
+	
 }
 
 // Moves the cursor up one line.
@@ -296,7 +309,7 @@ void editorProcessKeypress(struct Editor *editor) {
 					editor->keepRunning = false;
 					break;	
 				case 'e':
-					editor->mode = EDIT;
+					editor->mode = INSERT;
 					break;
 				case 'i':
 				case KEY_UP:
@@ -317,13 +330,13 @@ void editorProcessKeypress(struct Editor *editor) {
 			}
 			break;
 
-		case EDIT:
+		case INSERT:
 			switch (ch) {
-				case 'q':
-					editor->keepRunning = false;
-					break;
 				case ESC:
 					editor->mode = NORMAL;
+					break;
+				case ' '...'~':
+					editorInsert(editor, ch);
 					break;
 			}
 			break;
