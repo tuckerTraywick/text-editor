@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <string.h>
 #include <stdio.h>
 #include <ncurses.h>
 
@@ -106,6 +107,8 @@ void bufferAppendLine(struct Buffer *buffer, struct Line *line) {
 		// TODO: Handle failed `realloc()`.
 		assert(buffer->lines && "`realloc()` failed.");
 	}
+
+	// Append the line.
 	buffer->lines[buffer->length] = *line;
 	++buffer->length;
 }
@@ -133,7 +136,7 @@ void bufferReadFile(struct Buffer *buffer, FILE *file) {
 		assert(line.text && "`getline()` failed.");
 		
 		// If `line.text` is not null and `getline()` returns -1, then the file ends in a trailing
-		// newline and there is no more text to read, so we can exit early.
+		// newline and there is no more text to read, so we can return.
 		if (line.length == -1) {
 			free(line.text);
 			return;
@@ -203,7 +206,7 @@ void editorDrawStatusBar(struct Editor *editor) {
 	
 	static char *modes[] = {
 		[NORMAL] = "NORMAL",
-		[INSERT]   = "INSERT  ",
+		[INSERT]   = "INSERT",
 	};
 	char star = (editor->hasUnsavedChanges) ? '*' : ' ';
 	printw("%s %c%s", modes[editor->mode], star, editor->filePath);
@@ -237,12 +240,29 @@ struct Line *editorCurrentLine(struct Editor *editor) {
 }
 
 // Inserts a character at the cursor.
-void editorInsert(struct Editor *editor, char ch) {
+void editorInsertCharacter(struct Editor *editor, char ch) {
 	assert(editor);
 	assert(' ' <= ch && ch <= '~' && "`ch` must be printable.");
 
 	struct Line *currentLine = editorCurrentLine(editor);
-	
+	// Expand the line if needed.
+	if (currentLine->length == currentLine->capacity) {
+		currentLine->capacity *= 2;
+		currentLine->text = realloc(currentLine->text, currentLine->capacity);
+		// TODO: Handle failed `realloc()`.
+		assert(currentLine->text && "`realloc()` failed.");
+	}
+
+	// Shift the characters over one.
+	memmove(
+		currentLine->text + editor->cursorX + 1,
+		currentLine->text + editor->cursorX,
+		currentLine->length - editor->cursorX
+	);
+	// Insert the character.
+	currentLine->text[editor->cursorX] = ch;
+	++currentLine->length;
+	++editor->cursorX;
 }
 
 // Moves the cursor up one line.
@@ -335,8 +355,10 @@ void editorProcessKeypress(struct Editor *editor) {
 				case ESC:
 					editor->mode = NORMAL;
 					break;
+				case '\n':
+					break;
 				case ' '...'~':
-					editorInsert(editor, ch);
+					editorInsertCharacter(editor, ch);
 					break;
 			}
 			break;
