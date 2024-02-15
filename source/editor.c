@@ -252,7 +252,7 @@ void editorInsertCharacter(struct Editor *editor, char ch) {
 		assert(currentLine->text && "`realloc()` failed.");
 	}
 
-	// Shift the characters over one.
+	// Shift the characters right one.
 	memmove(
 		currentLine->text + editor->cursorX + 1,
 		currentLine->text + editor->cursorX,
@@ -262,6 +262,32 @@ void editorInsertCharacter(struct Editor *editor, char ch) {
 	currentLine->text[editor->cursorX] = ch;
 	++currentLine->length;
 	++editor->cursorX;
+}
+
+// Deletes the character at the cursor.
+void editorDeleteCharacter(struct Editor *editor) {
+	assert(editor);
+
+	// TOOD: Finish this function.
+
+	struct Line *currentLine = editorCurrentLine(editor);
+	if (editor->cursorX < currentLine->length) {
+		// Shift the characters left one.
+		memmove(
+			currentLine->text + editor->cursorX,
+			currentLine->text + editor->cursorX + 1,
+			currentLine->length - editor->cursorX
+		);
+		// Delete the character.
+		--currentLine->length;
+
+		// Shrink the line if needed.
+		if (currentLine->length <= currentLine->capacity/2) {
+
+		}
+	} else {
+
+	}
 }
 
 // Moves the cursor up one line.
