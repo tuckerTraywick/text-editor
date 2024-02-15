@@ -12,6 +12,7 @@
 #define BUFFER_INITIAL_CAPACITY 200
 
 #define min(a, b) (((a) <= (b)) ? (a) : (b))
+#define max(a, b) (((a) >= (b)) ? (a) : (b))
 
 // Represents a line in a buffer.
 struct Line {
@@ -268,8 +269,6 @@ void editorInsertCharacter(struct Editor *editor, char ch) {
 void editorDeleteCharacter(struct Editor *editor) {
 	assert(editor);
 
-	// TOOD: Finish this function.
-
 	struct Line *currentLine = editorCurrentLine(editor);
 	if (editor->cursorX < currentLine->length) {
 		// Shift the characters left one.
@@ -282,11 +281,14 @@ void editorDeleteCharacter(struct Editor *editor) {
 		--currentLine->length;
 
 		// Shrink the line if needed.
-		if (currentLine->length <= currentLine->capacity/2) {
-
+		if (currentLine->capacity > LINE_INITIAL_CAPACITY && currentLine->length <= currentLine->capacity/2) {
+			currentLine->capacity /= 2;
+			currentLine->text = realloc(currentLine->text, currentLine->capacity);
+			// TODO: Handle failed `realloc()`.
+			assert(currentLine->text && "`realloc()` failed.");
 		}
 	} else {
-
+		// TOOD: Finish this function.
 	}
 }
 
@@ -379,6 +381,9 @@ void editorProcessKeypress(struct Editor *editor) {
 			switch (ch) {
 				case ESC:
 					editor->mode = NORMAL;
+					break;
+				case KEY_DC:
+					editorDeleteCharacter(editor);
 					break;
 				case KEY_UP:
 					editorCursorLineUp(editor);
