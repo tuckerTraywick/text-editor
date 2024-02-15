@@ -355,6 +355,18 @@ void editorProcessKeypress(struct Editor *editor) {
 				case ESC:
 					editor->mode = NORMAL;
 					break;
+				case KEY_UP:
+					editorCursorLineUp(editor);
+					break;				
+				case KEY_DOWN:
+					editorCursorLineDown(editor);
+					break;
+				case KEY_LEFT:
+					editorCursorChracterLeft(editor);
+					break;
+				case KEY_RIGHT:
+					editorCursorChracterRight(editor);
+					break;
 				case '\n':
 					break;
 				case ' '...'~':
