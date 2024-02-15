@@ -5,7 +5,6 @@ int main(void) {
 	initscr();
 	raw();
 	keypad(stdscr, TRUE);
-	// nonl();
 	noecho();
 
     printw("Press Shift+q to quit.\nPress Shift+c to clear the screen.\n");
