@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <string.h>
 #include <stdio.h>
 #include <ncurses.h>
 
@@ -11,6 +12,7 @@
 #define BUFFER_INITIAL_CAPACITY 200
 
 #define min(a, b) (((a) <= (b)) ? (a) : (b))
+#define max(a, b) (((a) >= (b)) ? (a) : (b))
 
 // Represents a line in a buffer.
 struct Line {
@@ -34,16 +36,17 @@ struct Cursor {
 
 // Represents what mode the editor is in.
 enum EditorMode {
-	NORMAL, EDIT,
+	NORMAL, INSERT,
 };
 
 // Represents the state of the text editor.
 struct Editor {
 	char *filePath; // The path of the file being edited.
-	size_t scrollY; // The line number the screen starts at.
-	size_t scrollX; // The character the screen starts at.
 	struct Buffer buffer; // The buffer being edited.
-	struct Cursor cursor; // The cursor the user controls.
+	size_t cursorY; // The line the cursor points to.
+	size_t cursorX; // The character the cursor points to.
+	size_t scrollY; // The line the screen starts at.
+	size_t scrollX; // The character the screen starts at.
 	enum EditorMode mode; // What mode the editor is in.
 	bool keepRunning; // Flag to keep running.
 	bool hasUnsavedChanges; // Whether the buffer has unsaved changes.
@@ -52,7 +55,8 @@ struct Editor {
 // Returns a new line.
 struct Line lineCreate(void) {
 	char *text = malloc(LINE_INITIAL_CAPACITY);
-	assert(text && "`malloc()` failed."); // TODO: Handle failed `malloc()`.
+	// TODO: Handle failed `malloc()`.
+	assert(text && "`malloc()` failed.");
 	return (struct Line){
 		.capacity = LINE_INITIAL_CAPACITY,
 		.text = text,
@@ -70,7 +74,8 @@ void lineDestroy(struct Line *line) {
 // Returns a new buffer.
 struct Buffer bufferCreate(void) {
 	struct Line *lines = malloc((sizeof (struct Line))*BUFFER_INITIAL_CAPACITY);
-	assert(lines && "`malloc()` failed."); // TODO: Handle failed `malloc()`.
+	// TODO: Handle failed `malloc()`.
+	assert(lines && "`malloc()` failed.");
 	lines[0] = lineCreate();
 	return (struct Buffer){
 		.capacity = BUFFER_INITIAL_CAPACITY,
@@ -99,8 +104,11 @@ void bufferAppendLine(struct Buffer *buffer, struct Line *line) {
 	if (buffer->length == buffer->capacity) {
 		buffer->capacity *= 2;
 		buffer->lines = realloc(buffer->lines, buffer->capacity);
-		assert(buffer->lines && "`realloc()` failed."); // TODO: Handle failed `realloc()`.
+		// TODO: Handle failed `realloc()`.
+		assert(buffer->lines && "`realloc()` failed.");
 	}
+
+	// Append the line.
 	buffer->lines[buffer->length] = *line;
 	++buffer->length;
 }
@@ -128,7 +136,7 @@ void bufferReadFile(struct Buffer *buffer, FILE *file) {
 		assert(line.text && "`getline()` failed.");
 		
 		// If `line.text` is not null and `getline()` returns -1, then the file ends in a trailing
-		// newline and there is no more text to read, so we can exit early.
+		// newline and there is no more text to read, so we can return.
 		if (line.length == -1) {
 			free(line.text);
 			return;
@@ -168,7 +176,8 @@ void editorLoadFile(struct Editor *editor, char *path) {
 
 	// TODO: Check if editor has unsaved changes before loading the file.
 	FILE *file = fopen(path, "r");
-	assert(file && "`fopen()` failed."); // Handle failed `fopen()`.
+	// TODO: Handle failed `fopen()`.
+	assert(file && "`fopen()` failed.");
 	editor->filePath = path;
 	editor->hasUnsavedChanges = false;
 	bufferReadFile(&editor->buffer, file);
@@ -197,7 +206,7 @@ void editorDrawStatusBar(struct Editor *editor) {
 	
 	static char *modes[] = {
 		[NORMAL] = "NORMAL",
-		[EDIT]   = "EDIT  ",
+		[INSERT]   = "INSERT",
 	};
 	char star = (editor->hasUnsavedChanges) ? '*' : ' ';
 	printw("%s %c%s", modes[editor->mode], star, editor->filePath);
@@ -207,8 +216,8 @@ void editorDrawStatusBar(struct Editor *editor) {
 void editorDrawCursor(struct Editor *editor) {
 	assert(editor);
 
-	int y = editor->cursor.y - editor->scrollY;
-	int x = editor->cursor.x + 4;
+	int y = editor->cursorY - editor->scrollY;
+	int x = editor->cursorX + 4;
 	move(y, x);
 }
 
@@ -223,33 +232,91 @@ void editorDraw(struct Editor *editor) {
 	refresh();
 }
 
+// Returns the line the cursor points to.
 struct Line *editorCurrentLine(struct Editor *editor) {
 	assert(editor);
 	
-	return editor->buffer.lines + editor->cursor.y;
+	return editor->buffer.lines + editor->cursorY;
+}
+
+// Inserts a character at the cursor.
+void editorInsertCharacter(struct Editor *editor, char ch) {
+	assert(editor);
+	assert(' ' <= ch && ch <= '~' && "`ch` must be printable.");
+
+	struct Line *currentLine = editorCurrentLine(editor);
+	// Expand the line if needed.
+	if (currentLine->length == currentLine->capacity) {
+		currentLine->capacity *= 2;
+		currentLine->text = realloc(currentLine->text, currentLine->capacity);
+		// TODO: Handle failed `realloc()`.
+		assert(currentLine->text && "`realloc()` failed.");
+	}
+
+	// Shift the characters right one.
+	memmove(
+		currentLine->text + editor->cursorX + 1,
+		currentLine->text + editor->cursorX,
+		currentLine->length - editor->cursorX
+	);
+	// Insert the character.
+	currentLine->text[editor->cursorX] = ch;
+	++currentLine->length;
+	++editor->cursorX;
+}
+
+// Deletes the character at the cursor.
+void editorDeleteCharacter(struct Editor *editor) {
+	assert(editor);
+
+	struct Line *currentLine = editorCurrentLine(editor);
+	if (editor->cursorX < currentLine->length) {
+		// Shift the characters left one.
+		memmove(
+			currentLine->text + editor->cursorX,
+			currentLine->text + editor->cursorX + 1,
+			currentLine->length - editor->cursorX
+		);
+		// Delete the character.
+		--currentLine->length;
+
+		// Shrink the line if needed.
+		if (currentLine->capacity > LINE_INITIAL_CAPACITY && currentLine->length <= currentLine->capacity/2) {
+			currentLine->capacity /= 2;
+			currentLine->text = realloc(currentLine->text, currentLine->capacity);
+			// TODO: Handle failed `realloc()`.
+			assert(currentLine->text && "`realloc()` failed.");
+		}
+	} else {
+		// TOOD: Finish this function.
+	}
 }
 
 // Moves the cursor up one line.
 void editorCursorLineUp(struct Editor *editor) {
 	assert(editor);
 
-	if (editor->cursor.y > 0) {
-		--editor->cursor.y;
-		editor->cursor.x = min(editor->cursor.x, editorCurrentLine(editor)->length);
-	} else if (editor->cursor.y == 0) {
-		editor->cursor.x = 0;
+	if (editor->cursorY > 0) {
+		--editor->cursorY;
+		editor->cursorX = min(editor->cursorX, editorCurrentLine(editor)->length);
+		editor->scrollY = min(editor->scrollY, editor->cursorY);
+	} else {
+		editor->cursorX = 0;
 	}
 }
 
-// Moves the down one line.
+// Moves the cursor down one line.
 void editorCursorLineDown(struct Editor *editor) {
 	assert(editor);
 
-	if (editor->cursor.y < editor->buffer.length - 1) {
-		++editor->cursor.y;
-		editor->cursor.x = min(editor->cursor.x, editorCurrentLine(editor)->length);
-	} else if (editor->cursor.y == editor->buffer.length - 1) {
-		editor->cursor.x = editorCurrentLine(editor)->length;
+	if (editor->cursorY < editor->buffer.length - 1) {
+		++editor->cursorY;
+		editor->cursorX = min(editor->cursorX, editorCurrentLine(editor)->length);
+		if (editor->cursorY > editor->scrollY + LINES - 2) {
+			++editor->scrollY;
+		}
+	} else {
+		editor->cursorX = editorCurrentLine(editor)->length;
 	}
 }
 
@@ -257,11 +324,11 @@ void editorCursorLineDown(struct Editor *editor) {
 void editorCursorChracterLeft(struct Editor *editor) {
 	assert(editor);
 
-	if (editor->cursor.x > 0) {
-		--editor->cursor.x;
-	} else if (editor->cursor.y > 0) {
-		--editor->cursor.y;
-		editor->cursor.x = editorCurrentLine(editor)->length;
+	if (editor->cursorX > 0) {
+		--editor->cursorX;
+	} else if (editor->cursorY > 0) {
+		editorCursorLineUp(editor);
+		editor->cursorX = editorCurrentLine(editor)->length;
 	}
 }
 
@@ -269,11 +336,11 @@ void editorCursorChracterLeft(struct Editor *editor) {
 void editorCursorChracterRight(struct Editor *editor) {
 	assert(editor);
 
-	if (editor->cursor.x < editorCurrentLine(editor)->length) {
-		++editor->cursor.x;
-	} else if (editor->cursor.y < editor->buffer.length - 1) {
-		++editor->cursor.y;
-		editor->cursor.x = 0;
+	if (editor->cursorX < editorCurrentLine(editor)->length) {
+		++editor->cursorX;
+	} else if (editor->cursorY < editor->buffer.length - 1) {
+		editorCursorLineDown(editor);
+		editor->cursorX = 0;
 	}
 }
 
@@ -289,7 +356,7 @@ void editorProcessKeypress(struct Editor *editor) {
 					editor->keepRunning = false;
 					break;	
 				case 'e':
-					editor->mode = EDIT;
+					editor->mode = INSERT;
 					break;
 				case 'i':
 				case KEY_UP:
@@ -310,13 +377,30 @@ void editorProcessKeypress(struct Editor *editor) {
 			}
 			break;
 
-		case EDIT:
+		case INSERT:
 			switch (ch) {
-				case 'q':
-					editor->keepRunning = false;
-					break;
 				case ESC:
 					editor->mode = NORMAL;
+					break;
+				case KEY_DC:
+					editorDeleteCharacter(editor);
+					break;
+				case KEY_UP:
+					editorCursorLineUp(editor);
+					break;				
+				case KEY_DOWN:
+					editorCursorLineDown(editor);
+					break;
+				case KEY_LEFT:
+					editorCursorChracterLeft(editor);
+					break;
+				case KEY_RIGHT:
+					editorCursorChracterRight(editor);
+					break;
+				case '\n':
+					break;
+				case ' '...'~':
+					editorInsertCharacter(editor, ch);
 					break;
 			}
 			break;
@@ -332,7 +416,6 @@ void editorRun(struct Editor *editor) {
 	keypad(stdscr, TRUE);
 	set_escdelay(0);
 	noecho();
-	// nonl();
 
 	while (editor->keepRunning) {
 		editorDraw(editor);
