@@ -206,7 +206,7 @@ void editorDrawStatusBar(struct Editor *editor) {
 	
 	static char *modes[] = {
 		[NORMAL] = "NORMAL",
-		[INSERT]   = "INSERT",
+		[INSERT] = "INSERT",
 	};
 	char star = (editor->hasUnsavedChanges) ? '*' : ' ';
 	printw("%s %c%s", modes[editor->mode], star, editor->filePath);
@@ -281,7 +281,8 @@ void editorDeleteCharacter(struct Editor *editor) {
 		--currentLine->length;
 
 		// Shrink the line if needed.
-		if (currentLine->capacity > LINE_INITIAL_CAPACITY && currentLine->length <= currentLine->capacity/2) {
+		if (currentLine->capacity > LINE_INITIAL_CAPACITY 
+		    && currentLine->length <= currentLine->capacity/2) {
 			currentLine->capacity /= 2;
 			currentLine->text = realloc(currentLine->text, currentLine->capacity);
 			// TODO: Handle failed `realloc()`.
@@ -355,18 +356,18 @@ void editorProcessKeypress(struct Editor *editor) {
 				case 'q':
 					editor->keepRunning = false;
 					break;	
-				case 'e':
+				case 'i':
 					editor->mode = INSERT;
 					break;
-				case 'i':
+				case 'k':
 				case KEY_UP:
 					editorCursorLineUp(editor);
 					break;				
-				case 'k':
+				case 'j':
 				case KEY_DOWN:
 					editorCursorLineDown(editor);
 					break;
-				case 'j':
+				case 'h':
 				case KEY_LEFT:
 					editorCursorChracterLeft(editor);
 					break;
