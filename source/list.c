@@ -1,107 +1,95 @@
 #include <assert.h>
+#include <stdio.h>
+
 #include <stddef.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include "list.h"
 
-// static void listRealloc(struct List *list) {
-//     if (list->length >= list->capacity) {
-//         list->capacity *= 2;
-//     } else if (list->length <= list->capacity/2) {
-//         // Leave half of the gap between the last element and the end of the buffer for future
-//         // expansion.
-//         list->capacity -= (list->capacity - list->length)/2;
-//     }
-//     void *newElements = realloc(list->elements, list->elementSize*list->capacity);
-//     // TODO: Handle failed `realloc()`.
-//     assert(newElements && "`realloc()` failed.");
-//     list->elements = newElements;
-// }
+#define min(a, b) (((a) <= (b)) ? (a) : (b))
 
-// struct List listCreate(size_t capacity, size_t elementSize) {
-//     void *elements = malloc(elementSize*capacity);
-//     // TODO: Handle failed `malloc()`.
-//     assert(elements && "`malloc()` failed.");
-//     return (struct List){
-//         .capacity = capacity,
-//         .length = 0,
-//         .elementSize = elementSize,
-//         .elements = elements,
-//     };
-// }
+#define max(a, b) (((a) >= (b)) ? (a) : (b))
 
-// void listDestroy(struct List *list) {
-//     assert(list);
+typedef struct List_Header {
+	size_t capacity;
+	size_t size;
+	size_t element_size;
+	size_t pad;
+	char data[];
+} List_Header;
 
-//     free(list->elements);
-//     *list = (struct List){0};
-// }
+static List_Header *list_get_header(void *list) {
+	return (List_Header*)list - 1;
+}
 
-// void *listGet(struct List *list, size_t index) {
-//     assert(list);
-//     assert(index < list->length && "Index out of bounds.");
+void *list_create(size_t capacity, size_t element_size) {
+	List_Header *list = malloc(sizeof (List_Header) + capacity*element_size);
+	if (!list) {
+		return NULL;
+	}
+	*list = (List_Header){
+		.capacity = capacity,
+		.element_size = element_size,
+	};
+	return list + 1;
+}
 
-//     return (char*)list->elements + list->elementSize*index;
-// }
+void list_destroy(void *list) {
+	free((List_Header*)list - 1);
+}
 
-// void listSet(struct List *list, size_t index, void *element) {
-//     assert(list);
-//     assert(element);
-//     assert(index < list->length && "Index out of bounds.");
+size_t list_get_capacity(void *list) {
+	List_Header *header = list_get_header(list);
+	return header->capacity;
+}
 
-//     memcpy((char*)list->elements + list->elementSize*index, element, list->elementSize);
-// }
+void *list_set_capacity(void *list, size_t capacity) {
+	List_Header *new_list = realloc(list_get_header(list), sizeof (List_Header) + capacity*list_get_element_size(list));
+	if (!new_list) {
+		return NULL;
+	}
+	new_list->capacity = capacity;
+	return new_list + 1;
+}
 
-// void listSwap(struct List *list, size_t indexA, size_t indexB) {
-//     assert(list);
-//     assert(indexA < list->length && "`indexA` out of bounds.");
-//     assert(indexB < list->length && "`indexB` out of bounds.");
+size_t list_get_size(void *list) {
+	List_Header *header = list_get_header(list);
+	return header->size;
+}
 
-//     // Equivalent to: `*temp = *list[indexA]; *list[indexA] = *list[indexB]; *list[indexB] = *temp;`
-//     void *temp = malloc(list->elementSize);
-//     // TODO: Handle failed `malloc()`.
-//     assert(temp && "`malloc()` failed.");
-//     memcpy(temp, listGet(list, indexA), list->elementSize);
-//     memcpy(listGet(list, indexA), listGet(list, indexB), list->elementSize);
-//     memcpy(listGet(list, indexB), temp, list->elementSize);
-// }
+void *list_set_size(void *list, size_t size) {
+	if (size >= list_get_capacity(list)) {
+		list = list_set_capacity(list, max(list_get_capacity(list)*2, size));
+		if (!list) {
+			return NULL;
+		}
+	}
+	List_Header *header = list_get_header(list);
+	header->size = size;
+	return list;
+}
 
-// void listInsert(struct List *list, size_t index, void *element) {
-//     assert(list);
-//     assert(element);
-//     assert(index <= list->length && "Index out of bounds.");
-//     assert(list->length <= list->capacity && "Length incremented too much.");
+size_t list_get_element_size(void *list) {
+	List_Header *header = list_get_header(list);
+	return header->element_size;
+}
 
-//     listRealloc(list);
-//     // Shift the elements starting at `index` one to the right to make room for the new element.
-//     memmove(
-//         (char*)list->elements + list->elementSize*(index + 1),
-//         (char*)list->elements + list->elementSize*index,
-//         list->elementSize*(list->length - index)
-//     );
-//     memcpy((char*)list->elements + list->elementSize*index, element, list->elementSize);
-//     ++list->length;
-// }
+void *list_push(void *list, void *element) {
+	list = list_set_size(list, list_get_size(list) + 1);
+	if (list) {
+		memcpy((char*)list + (list_get_size(list) - 1)*list_get_element_size(list), element, list_get_element_size(list));
+	}
+	return list;
+}
 
-// void listAppend(struct List *list, void *element) {
-//     assert(list);
-//     assert(element);
+void *list_pop(void *list, void *destination) {
+	list = list_set_size(list, list_get_size(list) - 1);
+	if (list) {
+		memcpy(destination, (char*)list + (list_get_size(list) + 1)*list_get_element_size(list), list_get_element_size(list));
+	}
+	return list;
+}
 
-//     listRealloc(list);
-//     memcpy((char*)list->elements + list->elementSize*list->length, element, list->elementSize);
-//     ++list->length;
-// }
-
-// void listRemove(struct List *list, size_t index) {
-//     assert(list);
-//     assert(index < list->length && "Index out of bounds.");
-
-//     // Shift the elements starting at `index` one to the left.
-//     memmove(
-//         (char*)list->elements + list->elementSize*index,
-//         (char*)list->elements + list->elementSize*(index + 1),
-//         list->elementSize*(list->length - index)
-//     );
-//     --list->length;
-//     listRealloc(list);
-// }
+#undef min
+#undef max

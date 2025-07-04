@@ -1,5 +1,1 @@
-#/bin/sh
-./build.sh
-echo
-echo "---- RUNNING ----"
-./binary/run
+clear && cmake -Bbuild -S. && cmake --build build && echo "" && ./build/run

@@ -12,6 +12,7 @@
 #define BUFFER_INITIAL_CAPACITY 200
 
 #define min(a, b) (((a) <= (b)) ? (a) : (b))
+
 #define max(a, b) (((a) >= (b)) ? (a) : (b))
 
 // Represents a line in a buffer.
@@ -44,7 +45,33 @@ struct Editor {
 	char *filePath; // The path of the file being edited.
 	struct Buffer buffer; // The buffer being edited.
 	size_t cursorY; // The line the cursor points to.
-	size_t cursorX; // The character the cursor points to.
+	size_t cursorX; // The character the 
+// Represents a line in a buffer.
+struct Line {
+	size_t capacity; // The maximum length of the line.
+	size_t length; // The current length of the line.
+	char *text; // The buffer that holds the text of the line.
+};
+
+// Represents an open file in the editor.
+struct Buffer {
+	size_t capacity; // The maximum number of lines.
+	size_t length; // The current number of lines.
+	struct Line *lines; // The buffer that holds the lines.
+};
+
+// Represents the cursor the user controls.
+struct Cursor {
+	size_t y; // The index of the row the cursor points to.
+	size_t x; // The index of the column the cursor points to.
+};
+
+// Represents what mode the editor is in.
+enum EditorMode {
+	NORMAL, INSERT,
+};
+
+// Represents the state of the text editocursor points to.
 	size_t scrollY; // The line the screen starts at.
 	size_t scrollX; // The character the screen starts at.
 	enum EditorMode mode; // What mode the editor is in.
