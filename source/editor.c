@@ -28,7 +28,7 @@ struct piece {
 
 // A piece of text being edited stored as a piece table.
 struct buffer {
-	char8 *original_text; // Points to an `mmap()`ed chunk of memory if a file has been read into the table.
+	char8 *original_text; // Points to an `mmap()`ed chunk of memory if a file has been read into the buffer.
 	char8 *new_text; // Points to a list.
 	struct piece *pieces; // Points to a list.
 	struct piece *free_pieces; // A linked list of pieces that have been deleted. Not a list. Don't free.
