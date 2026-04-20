@@ -27,7 +27,7 @@ struct buffer {
 	char8 *new_text; // Points to a list.
 	struct piece *pieces; // Points to a list.
 	struct piece *free_pieces; // A linked list of pieces that have been deleted. Not a list. Don't free.
-	struct piece *first_piece;
+	struct piece *first_piece; // A linked list of pieces that are currently in use. Not a list. Don't free.
 };
 
 // A view used to edit a buffer. Multiple views can edit the same buffer.
