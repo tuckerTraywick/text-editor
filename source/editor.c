@@ -8,44 +8,18 @@
 // Sentinal used as a piece's next/previous index to indicate there is no piece before/after it.
 #define PIECE_NONE UINT32_MAX
 
-// A UTF-8 code unit.
-typedef char char8;
+// Assumes `position` is in the bounds of `buffer`.
+// TODO: Make this use `char32`.
+static char8 *buffer_get_character_pointer(struct buffer *buffer, uint32_t position) {
+	struct piece *piece = {0};
+	uint32_t offset = 0;
+	buffer_get_piece_and_offset(buffer, position, &piece, &offset);
+	if (piece->is_new) {
+		return buffer->new_text + piece->selection.index + offset;
+	}
+	return buffer->original_text + piece->selection.index + offset;
+}
 
-// An entire unicode code point.
-typedef uint32_t char32;
-
-struct selection {
-	uint32_t index;
-	uint32_t length;
-};
-
-struct piece {
-	uint32_t previous_piece_index; // The index of the previous piece in the chain.
-	uint32_t next_piece_index; // The index of the next piece in the chain.
-	struct selection selection; // Relative to the start of the arena this piece points to.
-	bool is_new;
-};
-
-// A piece of text being edited stored as a piece table.
-struct buffer {
-	char8 *original_text; // Points to an `mmap()`ed chunk of memory if a file has been read into the buffer.
-	char8 *new_text; // Points to a list.
-	struct piece *pieces; // Points to a list.
-	struct piece *free_pieces; // A linked list of pieces that have been deleted. Not a list. Don't free.
-	struct piece *first_piece;
-};
-
-// A view used to edit a buffer. Multiple views can edit the same buffer.
-struct buffer_view {
-	struct buffer *buffer;
-	struct selection *selections; // Points to a list.
-	uint32_t current_selection_index;
-	struct selection *matches; // Points to a list. The matches for the find term in the buffer being viewed.
-	uint32_t current_match_index;
-};
-
-// Returns true if a memory error occurred. Do NOT call `buffer_destroy()` on `buffer` if this
-// function fails.
 bool buffer_initialize(struct buffer *buffer, uint32_t new_text_capacity, uint32_t pieces_capacity) {
 	// Initialize the buffer's arenas.
 	*buffer = (struct buffer){0};
@@ -85,8 +59,6 @@ void buffer_destroy(struct buffer *buffer) {
 	*buffer = (struct buffer){0};
 }
 
-// Returns the piece containing the character at `position` and the character's offset within the
-// piece. Assumes `position` is in the bounds of `buffer`.
 void buffer_get_piece_and_offset(struct buffer *buffer, uint32_t position, struct piece **piece, uint32_t *offset) {
 	*piece = buffer->first_piece;
 	uint32_t current_piece_offset = 0;
@@ -101,32 +73,14 @@ void buffer_get_piece_and_offset(struct buffer *buffer, uint32_t position, struc
 	}
 }
 
-// Assumes `position` is in the bounds of `buffer`.
-// TODO: Make this use `char32`.
-char8 *buffer_get_character_pointer(struct buffer *buffer, uint32_t position) {
-	struct piece *piece = {0};
-	uint32_t offset = 0;
-	buffer_get_piece_and_offset(buffer, position, &piece, &offset);
-	if (piece->is_new) {
-		return buffer->new_text + piece->selection.index + offset;
-	}
-	return buffer->original_text + piece->selection.index + offset;
-}
-
-// Assumes `position` is in the bounds of `buffer`.
-// TODO: Make this use `char32`.
 char8 buffer_get_character(struct buffer *buffer, uint32_t position) {
 	return *buffer_get_character_pointer(buffer, position);
 }
 
-// Assumes `position` is in the bounds of `buffer`.
-// TODO: Make this use `char32`.
 void buffer_set_character(struct buffer *buffer, uint32_t position, char8 character) {
 	*buffer_get_character_pointer(buffer, position) = character;
 }
 
-// If `source` is null, appends an empty piece. Returns a pointer to the new piece if no memory
-// errors occurred.
 struct piece *buffer_insert_piece_before(struct buffer *buffer, struct piece *destination, struct piece *source) {
 	struct piece *new_piece = buffer->free_pieces;
 	// Try to find a free piece first.
@@ -168,7 +122,6 @@ struct piece *buffer_insert_piece_before(struct buffer *buffer, struct piece *de
 	return new_piece;
 }
 
-// Splits `piece` in half at `offset`. Returns both halves and true if no memory errors occurred.
 bool buffer_split_piece(struct buffer *buffer, struct piece *piece, uint32_t offset, struct piece **left, struct piece **right) {
 	// Insert the new piece.
 	struct piece *new_piece = buffer_insert_piece_before(buffer, piece, NULL);
@@ -193,13 +146,9 @@ bool buffer_split_piece(struct buffer *buffer, struct piece *piece, uint32_t off
 	return true;
 }
 
-// Assumes `position` is in the bounds of `buffer`.
-// TODO: Make this use `char32` and accept a string instead of a single character.
-bool buffer_insert_character(struct buffer *buffer, uint32_t position, char8 character);
-
 void buffer_print_piece(struct buffer *buffer, struct piece *piece) {
 	char *source_name = (piece->is_new) ? "new" : "original";
-	char *source_text = (piece->is_new) ? buffer->new_text : buffer->original_text;
+	char *source_text = (char*)((piece->is_new) ? buffer->new_text : buffer->original_text);
 	printf("%lu %s index=%u, length=%u, previous=%u, next=%u", piece - buffer->pieces, source_name, piece->selection.index, piece->selection.length, piece->previous_piece_index, piece->next_piece_index);
 	if (source_text) {
 		printf(", text=`%.*s`", piece->selection.length, source_text);
@@ -230,46 +179,4 @@ void teardown_ncurses(void) {
 	endwin();
 }
 
-int main(void) {
-	const uint32_t initial_text_capacity = 1024;
-	const uint32_t initial_piece_capacity = 100;
-	struct buffer buffer = {0};
-	if (!buffer_initialize(&buffer, initial_text_capacity, initial_piece_capacity)) {
-		printf("Error initializing piece buffer.\n");
-		return 1;
-	}
-
-	struct piece *old_piece = NULL;
-	uint32_t offset = 0;
-	buffer_get_piece_and_offset(&buffer, 0, &old_piece, &offset);
-	// buffer_print_piece(&buffer, old_piece);
-	// printf("offset = %u\n", offset);
-
-	struct piece new_piece = {
-		.is_new = true,
-		.selection = {
-			.index = 3,
-			.length = 5,
-		},
-	};
-	struct piece *new_piece_ptr = buffer_insert_piece_before(&buffer, old_piece, &new_piece);
-
-
-	new_piece = (struct piece){
-		.is_new = false,
-		.selection = {
-			.index = 7,
-			.length = 9,
-		},
-	};
-	buffer_insert_piece_before(&buffer, old_piece, &new_piece);
-
-
-	buffer_print_pieces(&buffer);
-
-	setup_ncurses();
-	teardown_ncurses();
-
-	buffer_destroy(&buffer);
-	return 0;
-}
+#undef PIECE_NONE
