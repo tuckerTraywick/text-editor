@@ -107,7 +107,7 @@ void *list_push_back_impl(void **list, void *value) {
 		return NULL;
 	}
 	struct list_header *header = get_header(list);
-	memcpy(header->buckets + (header->buckets_count - 1)*header->bucket_size, value, header->bucket_size);
+	memcpy(new_value, value, header->bucket_size);
 	return new_value;
 }
 
