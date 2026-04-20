@@ -120,29 +120,30 @@ struct piece *buffer_insert_piece_before(struct buffer *buffer, uint32_t destina
 	return new_piece;
 }
 
-// bool buffer_split_piece(struct buffer *buffer, struct piece *piece, uint32_t offset, struct piece **left, struct piece **right) {
-// 	// Insert the new piece.
-// 	struct piece *new_piece = buffer_insert_piece_before(buffer, piece, NULL);
-// 	if (!new_piece) {
-// 		return false;
-// 	}
+bool buffer_split_piece(struct buffer *buffer, uint32_t piece_index, uint32_t offset, struct piece **left, struct piece **right) {
+	// Insert the new piece.
+	struct piece *new_piece = buffer_insert_piece_before(buffer, piece_index, NULL);
+	if (!new_piece) {
+		return false;
+	}
+	struct piece *piece = buffer->pieces + piece_index;
 
-// 	// Fix the new piece.
-// 	*new_piece = (struct piece){
-// 		.selection = {
-// 			.index = piece->selection.index,
-// 			.length = offset,
-// 		},
-// 		.is_new = piece->is_new,
-// 	};
+	// Fix the new piece.
+	*new_piece = (struct piece){
+		.selection = {
+			.index = piece->selection.index,
+			.length = offset,
+		},
+		.is_new = piece->is_new,
+	};
 
-// 	// Fix the original piece.
-// 	piece->selection.index = offset + 1;
-// 	piece->selection.length -= offset;
-// 	*left = new_piece;
-// 	*right = piece;
-// 	return true;
-// }
+	// Fix the original piece.
+	piece->selection.index = offset + 1;
+	piece->selection.length -= offset;
+	*left = new_piece;
+	*right = piece;
+	return true;
+}
 
 void buffer_print_piece(struct buffer *buffer, struct piece *piece) {
 	char *source_name = (piece->is_new) ? "new" : "original";

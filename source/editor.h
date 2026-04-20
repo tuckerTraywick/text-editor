@@ -68,8 +68,9 @@ void buffer_set_character(struct buffer *buffer, uint32_t position, char8 charac
 // errors occurred.
 struct piece *buffer_insert_piece_before(struct buffer *buffer, uint32_t destination_index, struct piece *source);
 
-// Splits `piece` in half at `offset`. Returns both halves and true if no memory errors occurred.
-bool buffer_split_piece(struct buffer *buffer, struct piece *piece, uint32_t offset, struct piece **left, struct piece **right);
+// Splits the piece at `piece_index` in half at `offset`. Returns both halves and true if no memory
+// errors occurred.
+bool buffer_split_piece(struct buffer *buffer, uint32_t piece_index, uint32_t offset, struct piece **left, struct piece **right);
 
 // Assumes `position` is in the bounds of `buffer`.
 // TODO: Make this use `char32` and accept a string instead of a single character.
