@@ -2,9 +2,9 @@ args :=
 libraries := $(shell pkg-config --libs ncurses)
 cflags := -std=gnu99 -Wall -Wpedantic -Wextra -g3 $(shell pkg-config --cflags ncurses)
 cc := gcc
-main_file = editor.c
+main_file = main.c
 
-source_files := $(shell find source -name '*.c' -not -name "main_file")
+source_files := $(shell find source -name '*.c' -not -name $(main_file))
 object_files := $(source_files:%=build/%.o)
 d_files := $(source_files:%=build/%.d)
 
