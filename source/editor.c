@@ -32,6 +32,7 @@ struct buffer {
 	char8 *new_text; // Points to a list.
 	struct piece *pieces; // Points to a list.
 	struct piece *free_pieces; // A linked list of pieces that have been deleted. Not a list. Don't free.
+	struct piece *first_piece;
 };
 
 // A view used to edit a buffer. Multiple views can edit the same buffer.
@@ -56,6 +57,7 @@ bool buffer_initialize(struct buffer *buffer, uint32_t new_text_capacity, uint32
 	if (!buffer->pieces) {
 		goto error2;
 	}
+	buffer->first_piece = buffer->pieces;
 
 	// Add the initial piece.
 	struct piece first_piece = {
@@ -152,8 +154,11 @@ struct piece *buffer_insert_piece_before(struct buffer *buffer, struct piece *de
 	new_piece->previous_piece_index = destination->previous_piece_index;
 	new_piece->next_piece_index = destination - buffer->pieces;
 
-	// Fix the previous piece's link.
-	if (destination->previous_piece_index != PIECE_NONE) {
+	// Update the pointer to the first piece if we are inserting before it.
+	if (destination->previous_piece_index == PIECE_NONE) {
+		buffer->first_piece = new_piece;
+	// Else, fix the previous piece's link.
+	} else {
 		struct piece *previous = buffer->pieces + destination->previous_piece_index;
 		previous->next_piece_index = new_piece - buffer->pieces;
 	}
@@ -192,6 +197,27 @@ bool buffer_split_piece(struct buffer *buffer, struct piece *piece, uint32_t off
 // TODO: Make this use `char32` and accept a string instead of a single character.
 bool buffer_insert_character(struct buffer *buffer, uint32_t position, char8 character);
 
+void buffer_print_piece(struct buffer *buffer, struct piece *piece) {
+	char *source_name = (piece->is_original) ? "original" : "new";
+	char *source_text = (piece->is_original) ? buffer->original_text : buffer->new_text;
+	printf("%lu %s index=%u, length=%u", piece - buffer->pieces, source_name, piece->selection.index, piece->selection.length);
+	if (source_text) {
+		printf(", text=`%.*s`", piece->selection.length, source_text);
+	}
+	printf("\n");
+}
+
+void buffer_print_pieces(struct buffer *buffer) {
+	struct piece *current_piece = buffer->pieces;
+	while (true) {
+		buffer_print_piece(buffer, current_piece);
+		if (current_piece->next_piece_index == PIECE_NONE) {
+			return;
+		}
+		current_piece = buffer->pieces + current_piece->next_piece_index;
+	}
+}
+
 void setup_ncurses(void) {
 	initscr();
 	raw();
@@ -212,6 +238,25 @@ int main(void) {
 		printf("Error initializing piece buffer.\n");
 		return 1;
 	}
+
+	struct piece *old_piece = NULL;
+	uint32_t offset = 0;
+	buffer_get_piece_and_offset(&buffer, 0, &old_piece, &offset);
+	buffer_print_piece(&buffer, old_piece);
+	printf("offset = %u\n", offset);
+
+	struct piece new_piece = {
+		.is_original = true,
+		.selection = {
+			.index = 3,
+			.length = 5,
+		},
+	};
+	struct piece *new_piece_ptr = buffer_insert_piece_before(&buffer, old_piece, &new_piece);
+	buffer_print_piece(&buffer, new_piece_ptr);
+
+
+	buffer_print_pieces(&buffer);
 
 	setup_ncurses();
 	teardown_ncurses();
