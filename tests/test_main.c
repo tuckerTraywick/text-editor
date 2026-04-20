@@ -5,19 +5,18 @@
 #include "list.h"
 
 static void test_buffer_initialize_and_destroy(void) {
+	struct buffer buffer = {0};
+	buffer_initialize(&buffer, 1, 1);
+	assert_eq((void*)buffer.pieces, (void*)buffer.first_piece, "%p", "%p");
+	assert_eq(list_get_capacity(&buffer.pieces), (size_t)1, "%zu", "%zu");
+	assert_eq(list_get_count(&buffer.pieces), (size_t)1, "%zu", "%zu");
 
-	// struct buffer buffer = {0};
-	// buffer_initialize(&buffer, 1, 1);
-	// assert_eq((void*)buffer.pieces, (void*)buffer.first_piece, "%p", "%p");
-	// assert_eq(list_get_capacity(&buffer.pieces), (size_t)1, "%zu", "%zu");
-	// assert_eq(list_get_count(&buffer.pieces), (size_t)0, "%zu", "%zu");
-
-	// buffer_destroy(&buffer);
-	// assert_eq((void*)buffer.original_text, NULL, "%p", "%p");
-	// assert_eq((void*)buffer.new_text, NULL, "%p", "%p");
-	// assert_eq((void*)buffer.pieces, NULL, "%p", "%p");
-	// assert_eq((void*)buffer.free_pieces, NULL, "%p", "%p");
-	// assert_eq((void*)buffer.first_piece, NULL, "%p", "%p");
+	buffer_destroy(&buffer);
+	assert_eq((void*)buffer.original_text, NULL, "%p", "%p");
+	assert_eq((void*)buffer.new_text, NULL, "%p", "%p");
+	assert_eq((void*)buffer.pieces, NULL, "%p", "%p");
+	assert_eq((void*)buffer.free_pieces, NULL, "%p", "%p");
+	assert_eq((void*)buffer.first_piece, NULL, "%p", "%p");
 }
 
 static void test_buffer_insert_piece_before(void) {
