@@ -91,15 +91,24 @@ bool list_is_not_empty_impl(void **list) {
 	return header->buckets_count != 0;
 }
 
-bool list_push_back_impl(void **list, void *value) {
+void *list_push_back_uninitialized_impl(void **list) {
 	struct list_header *header = get_header(list);
 	if (header->buckets_count == header->buckets_capacity && !list_set_capacity_impl(list, list_growth_factor*header->buckets_capacity)) {
-		return false;
+		return NULL;
 	}
 	header = get_header(list);
-	memcpy(header->buckets + header->buckets_count*header->bucket_size, value, header->bucket_size);
 	++header->buckets_count;
-	return true;
+	return header->buckets + header->bucket_size*(header->buckets_count - 1);
+}
+
+void *list_push_back_impl(void **list, void *value) {
+	void *new_value = list_push_back_uninitialized_impl(list);
+	if (!new_value) {
+		return NULL;
+	}
+	struct list_header *header = get_header(list);
+	memcpy(header->buckets + header->buckets_count*header->bucket_size, value, header->bucket_size);
+	return new_value;
 }
 
 bool list_pop_back_impl(void **list, void *result) {

@@ -26,7 +26,11 @@
 
 #define list_is_not_empty(list) (list_is_not_empty_impl((void**)(list)))
 
+// Returns a pointer to the new element if no memory errors occurred, else NULL.
 #define list_push_back(list, value) (list_push_back_impl((void**)(list), (value)))
+
+// Returns a pointer to the new element if no memory errors occurred, else NULL.
+#define list_push_back_uninitialized(list) (list_push_back_uninitialized_impl((void**)(list)))
 
 #define list_pop_back(list, result) (list_pop_back_impl((void**)(list), (result)))
 
@@ -52,7 +56,9 @@ bool list_is_empty_impl(void **list);
 
 bool list_is_not_empty_impl(void **list);
 
-bool list_push_back_impl(void **list, void *value);
+void *list_push_back_impl(void **list, void *value);
+
+void *list_push_back_uninitialized_impl(void **list);
 
 bool list_pop_back_impl(void **list, void *result);
 
