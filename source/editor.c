@@ -23,7 +23,7 @@ struct piece {
 	uint32_t previous_piece_index; // The index of the previous piece in the chain.
 	uint32_t next_piece_index; // The index of the next piece in the chain.
 	struct selection selection; // Relative to the start of the arena this piece points to.
-	bool is_original;
+	bool is_new;
 };
 
 // A piece of text being edited stored as a piece table.
@@ -88,7 +88,7 @@ void buffer_destroy(struct buffer *buffer) {
 // Returns the piece containing the character at `position` and the character's offset within the
 // piece. Assumes `position` is in the bounds of `buffer`.
 void buffer_get_piece_and_offset(struct buffer *buffer, uint32_t position, struct piece **piece, uint32_t *offset) {
-	*piece = buffer->pieces;
+	*piece = buffer->first_piece;
 	uint32_t current_piece_offset = 0;
 	while (true) {
 		struct selection text = (*piece)->selection;
@@ -107,10 +107,10 @@ char8 *buffer_get_character_pointer(struct buffer *buffer, uint32_t position) {
 	struct piece *piece = {0};
 	uint32_t offset = 0;
 	buffer_get_piece_and_offset(buffer, position, &piece, &offset);
-	if (piece->is_original) {
-		return buffer->original_text + piece->selection.index + offset;
+	if (piece->is_new) {
+		return buffer->new_text + piece->selection.index + offset;
 	}
-	return buffer->new_text + piece->selection.index + offset;
+	return buffer->original_text + piece->selection.index + offset;
 }
 
 // Assumes `position` is in the bounds of `buffer`.
@@ -182,7 +182,7 @@ bool buffer_split_piece(struct buffer *buffer, struct piece *piece, uint32_t off
 			.index = piece->selection.index,
 			.length = offset,
 		},
-		.is_original = piece->is_original,
+		.is_new = piece->is_new,
 	};
 
 	// Fix the original piece.
@@ -198,9 +198,9 @@ bool buffer_split_piece(struct buffer *buffer, struct piece *piece, uint32_t off
 bool buffer_insert_character(struct buffer *buffer, uint32_t position, char8 character);
 
 void buffer_print_piece(struct buffer *buffer, struct piece *piece) {
-	char *source_name = (piece->is_original) ? "original" : "new";
-	char *source_text = (piece->is_original) ? buffer->original_text : buffer->new_text;
-	printf("%lu %s index=%u, length=%u", piece - buffer->pieces, source_name, piece->selection.index, piece->selection.length);
+	char *source_name = (piece->is_new) ? "new" : "original";
+	char *source_text = (piece->is_new) ? buffer->new_text : buffer->original_text;
+	printf("%lu %s index=%u, length=%u, previous=%u, next=%u", piece - buffer->pieces, source_name, piece->selection.index, piece->selection.length, piece->previous_piece_index, piece->next_piece_index);
 	if (source_text) {
 		printf(", text=`%.*s`", piece->selection.length, source_text);
 	}
@@ -208,7 +208,7 @@ void buffer_print_piece(struct buffer *buffer, struct piece *piece) {
 }
 
 void buffer_print_pieces(struct buffer *buffer) {
-	struct piece *current_piece = buffer->pieces;
+	struct piece *current_piece = buffer->first_piece;
 	while (true) {
 		buffer_print_piece(buffer, current_piece);
 		if (current_piece->next_piece_index == PIECE_NONE) {
@@ -242,18 +242,27 @@ int main(void) {
 	struct piece *old_piece = NULL;
 	uint32_t offset = 0;
 	buffer_get_piece_and_offset(&buffer, 0, &old_piece, &offset);
-	buffer_print_piece(&buffer, old_piece);
-	printf("offset = %u\n", offset);
+	// buffer_print_piece(&buffer, old_piece);
+	// printf("offset = %u\n", offset);
 
 	struct piece new_piece = {
-		.is_original = true,
+		.is_new = true,
 		.selection = {
 			.index = 3,
 			.length = 5,
 		},
 	};
 	struct piece *new_piece_ptr = buffer_insert_piece_before(&buffer, old_piece, &new_piece);
-	buffer_print_piece(&buffer, new_piece_ptr);
+
+
+	new_piece = (struct piece){
+		.is_new = false,
+		.selection = {
+			.index = 7,
+			.length = 9,
+		},
+	};
+	buffer_insert_piece_before(&buffer, old_piece, &new_piece);
 
 
 	buffer_print_pieces(&buffer);
