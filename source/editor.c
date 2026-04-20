@@ -5,9 +5,6 @@
 #include "editor.h"
 #include "list.h"
 
-// Sentinal used as a piece's next/previous index to indicate there is no piece before/after it.
-#define PIECE_NONE UINT32_MAX
-
 // Assumes `position` is in the bounds of `buffer`.
 // TODO: Make this use `char32`.
 static char8 *buffer_get_character_pointer(struct buffer *buffer, uint32_t position) {
@@ -178,5 +175,3 @@ void setup_ncurses(void) {
 void teardown_ncurses(void) {
 	endwin();
 }
-
-#undef PIECE_NONE

@@ -3,6 +3,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+// Sentinal used as a piece's next/previous index to indicate there is no piece before/after it.
+#define PIECE_NONE UINT32_MAX
+
 // A UTF-8 code unit.
 typedef uint8_t char8;
 
