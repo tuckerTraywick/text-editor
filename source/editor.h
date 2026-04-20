@@ -66,7 +66,7 @@ void buffer_set_character(struct buffer *buffer, uint32_t position, char8 charac
 
 // If `source` is null, appends an empty piece. Returns a pointer to the new piece if no memory
 // errors occurred.
-struct piece *buffer_insert_piece_before(struct buffer *buffer, struct piece *destination, struct piece *source);
+struct piece *buffer_insert_piece_before(struct buffer *buffer, uint32_t destination_index, struct piece *source);
 
 // Splits `piece` in half at `offset`. Returns both halves and true if no memory errors occurred.
 bool buffer_split_piece(struct buffer *buffer, struct piece *piece, uint32_t offset, struct piece **left, struct piece **right);

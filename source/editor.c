@@ -78,7 +78,7 @@ void buffer_set_character(struct buffer *buffer, uint32_t position, char8 charac
 	*buffer_get_character_pointer(buffer, position) = character;
 }
 
-struct piece *buffer_insert_piece_before(struct buffer *buffer, struct piece *destination, struct piece *source) {
+struct piece *buffer_insert_piece_before(struct buffer *buffer, uint32_t destination_index, struct piece *source) {
 	struct piece *new_piece = buffer->free_pieces;
 	// Try to find a free piece first.
 	if (new_piece) {
@@ -102,6 +102,7 @@ struct piece *buffer_insert_piece_before(struct buffer *buffer, struct piece *de
 	}
 
 	// Fix the new piece's links.
+	struct piece *destination = buffer->pieces + destination_index;
 	new_piece->previous_piece_index = destination->previous_piece_index;
 	new_piece->next_piece_index = destination - buffer->pieces;
 
@@ -119,29 +120,29 @@ struct piece *buffer_insert_piece_before(struct buffer *buffer, struct piece *de
 	return new_piece;
 }
 
-bool buffer_split_piece(struct buffer *buffer, struct piece *piece, uint32_t offset, struct piece **left, struct piece **right) {
-	// Insert the new piece.
-	struct piece *new_piece = buffer_insert_piece_before(buffer, piece, NULL);
-	if (!new_piece) {
-		return false;
-	}
+// bool buffer_split_piece(struct buffer *buffer, struct piece *piece, uint32_t offset, struct piece **left, struct piece **right) {
+// 	// Insert the new piece.
+// 	struct piece *new_piece = buffer_insert_piece_before(buffer, piece, NULL);
+// 	if (!new_piece) {
+// 		return false;
+// 	}
 
-	// Fix the new piece.
-	*new_piece = (struct piece){
-		.selection = {
-			.index = piece->selection.index,
-			.length = offset,
-		},
-		.is_new = piece->is_new,
-	};
+// 	// Fix the new piece.
+// 	*new_piece = (struct piece){
+// 		.selection = {
+// 			.index = piece->selection.index,
+// 			.length = offset,
+// 		},
+// 		.is_new = piece->is_new,
+// 	};
 
-	// Fix the original piece.
-	piece->selection.index = offset + 1;
-	piece->selection.length -= offset;
-	*left = new_piece;
-	*right = piece;
-	return true;
-}
+// 	// Fix the original piece.
+// 	piece->selection.index = offset + 1;
+// 	piece->selection.length -= offset;
+// 	*left = new_piece;
+// 	*right = piece;
+// 	return true;
+// }
 
 void buffer_print_piece(struct buffer *buffer, struct piece *piece) {
 	char *source_name = (piece->is_new) ? "new" : "original";
