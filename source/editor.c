@@ -36,7 +36,7 @@ struct buffer {
 
 // A view used to edit a buffer. Multiple views can edit the same buffer.
 struct buffer_view {
-	struct buffer piece_table;
+	struct buffer *buffer;
 	struct selection *selections; // Points to a list.
 	uint32_t current_selection_index;
 	struct selection *matches; // Points to a list. The matches for the find term in the buffer being viewed.
