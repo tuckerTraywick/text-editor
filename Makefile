@@ -1,6 +1,6 @@
 args :=
-libraries := $(pkg-config --libs ncurses)
-cflags := -std=gnu99 -Wall -Wpedantic -Wextra -g3 $(pkg-config --cflags ncurses)
+libraries := $(shell pkg-config --libs ncurses)
+cflags := -std=gnu99 -Wall -Wpedantic -Wextra -g3 $(shell pkg-config --cflags ncurses)
 cc := gcc
 main_file = editor.c
 
@@ -17,11 +17,11 @@ all: build/run # build/test
 
 build/run: $(object_files) build/source/$(main_file).o
 	@mkdir -p build
-	@$(cc) $(LDFLAGS) $(libraries) $^ -o $@
+	@$(cc) $(libraries) $^ -o $@
 
 # build/test: $(test_object_files) $(object_files)
 # 	@mkdir -p build
-# 	@$(cc) $(LDFLAGS) $(libraries) $^ -o $@
+# 	@$(cc) $(libraries) $^ -o $@
 
 build/source/%.o: source/%
 	@mkdir -p $(dir $@)
