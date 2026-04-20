@@ -46,6 +46,7 @@ struct buffer_view {
 // Returns true if a memory error occurred. Do NOT call `buffer_destroy()` on `buffer` if this
 // function fails.
 bool buffer_initialize(struct buffer *buffer, uint32_t new_text_capacity, uint32_t pieces_capacity) {
+	// Initialize the buffer's arenas.
 	*buffer = (struct buffer){0};
 	buffer->new_text = list_create(new_text_capacity, sizeof *buffer->new_text);
 	if (!buffer->new_text) {
@@ -55,8 +56,19 @@ bool buffer_initialize(struct buffer *buffer, uint32_t new_text_capacity, uint32
 	if (!buffer->pieces) {
 		goto error2;
 	}
+
+	// Add the initial piece.
+	struct piece first_piece = {
+		.previous_piece_index = PIECE_NONE,
+		.next_piece_index = PIECE_NONE,
+	};
+	if (!list_push_back(&buffer->pieces, &first_piece)) {
+		goto error3;
+	}
 	return true;
 
+error3:
+	list_destroy(&buffer->pieces);
 error2:
 	list_destroy(&buffer->new_text);
 error1:
@@ -65,8 +77,8 @@ error1:
 }
 
 void buffer_destroy(struct buffer *buffer) {
-	list_destroy(&buffer->new_text);
 	list_destroy(&buffer->pieces);
+	list_destroy(&buffer->new_text);
 	// TODO: Unmap `buffer->old_text` if it is not null.
 	*buffer = (struct buffer){0};
 }
@@ -111,38 +123,43 @@ void buffer_set_character(struct buffer *buffer, uint32_t position, char8 charac
 	*buffer_get_character_pointer(buffer, position) = character;
 }
 
-// Returns a pointer to the new piece. If `source` is NULL, appends an empty piece. Returns null if
-// a memory error occurred.
+// If `source` is null, appends an empty piece. Returns a pointer to the new piece if no memory
+// errors occurred.
 struct piece *buffer_insert_piece_before(struct buffer *buffer, struct piece *destination, struct piece *source) {
-	struct piece empty_piece = {0};
-	struct piece *new_piece = NULL;
+	struct piece *new_piece = buffer->free_pieces;
 	// Try to find a free piece first.
-	if (buffer->free_pieces) {
-		new_piece = buffer->free_pieces;
+	if (new_piece) {
 		if (buffer->free_pieces->next_piece_index) {
 			buffer->free_pieces = buffer->pieces + buffer->free_pieces->next_piece_index;
 		} else {
 			buffer->free_pieces = NULL;
 		}
 	// Allocate a new piece if none are available.
-	} else if (!list_push_back(&buffer->pieces, (source) ? source : &empty_piece)) {
-		return NULL;
+	} else {
+		new_piece = list_push_back_uninitialized(&buffer->pieces);
+		if (!new_piece) {
+			return NULL;
+		}
 	}
 
-	// Fix the new piece.
-	new_piece = list_get_back(&buffer->pieces);
-	uint32_t new_piece_index = list_get_count(&buffer->pieces) - 1;
+	if (source) {
+		*new_piece = *source;
+	} else {
+		*new_piece = (struct piece){0};
+	}
+
+	// Fix the new piece's links.
 	new_piece->previous_piece_index = destination->previous_piece_index;
 	new_piece->next_piece_index = destination - buffer->pieces;
 
-	// Fix the previous piece.
+	// Fix the previous piece's link.
 	if (destination->previous_piece_index != PIECE_NONE) {
 		struct piece *previous = buffer->pieces + destination->previous_piece_index;
-		previous->next_piece_index = new_piece_index;
+		previous->next_piece_index = new_piece - buffer->pieces;
 	}
 
-	// Fix the destination piece.
-	destination->previous_piece_index = new_piece_index;
+	// Fix the destination piece's link.
+	destination->previous_piece_index = new_piece - buffer->pieces;
 	return new_piece;
 }
 
@@ -151,7 +168,7 @@ bool buffer_split_piece(struct buffer *buffer, struct piece *piece, uint32_t off
 	// Insert the new piece.
 	struct piece *new_piece = buffer_insert_piece_before(buffer, piece, NULL);
 	if (!new_piece) {
-		return NULL;
+		return false;
 	}
 
 	// Fix the new piece.
@@ -164,7 +181,10 @@ bool buffer_split_piece(struct buffer *buffer, struct piece *piece, uint32_t off
 	};
 
 	// Fix the original piece.
-	piece->selection.index = offset;
+	piece->selection.index = offset + 1;
+	piece->selection.length -= offset;
+	*left = new_piece;
+	*right = piece;
 	return true;
 }
 
