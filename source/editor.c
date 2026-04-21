@@ -128,17 +128,22 @@ bool buffer_split_piece(struct buffer *buffer, uint32_t piece_index, uint32_t of
 	}
 	struct piece *piece = buffer->pieces + piece_index;
 
-	// Fix the new piece.
-	*new_piece = (struct piece){
-		.selection = {
-			.index = piece->selection.index,
-			.length = offset,
-		},
-		.is_new = piece->is_new,
+	// // Fix the new piece.
+	new_piece->selection = (struct selection){
+		.index = piece->selection.index,
+		.length = offset,
 	};
+	new_piece->is_new = piece->is_new;
+	// *new_piece = (struct piece){
+	// 	.selection = {
+	// 		.index = piece->selection.index,
+	// 		.length = offset,
+	// 	},
+	// 	.is_new = piece->is_new,
+	// };
 
-	// Fix the original piece.
-	piece->selection.index = offset + 1;
+	// // Fix the original piece.
+	piece->selection.index += offset;
 	piece->selection.length -= offset;
 	*left = new_piece;
 	*right = piece;
