@@ -36,6 +36,7 @@ static void buffer_merge_pieces(struct buffer *buffer, struct piece *left, struc
 bool buffer_initialize(struct buffer *buffer, uint32_t new_text_capacity, uint32_t pieces_capacity) {
 	// Initialize the buffer's arenas.
 	*buffer = (struct buffer){0};
+	buffer->last_free_piece_index = PIECE_NONE;
 	buffer->new_text = list_create(new_text_capacity, sizeof *buffer->new_text);
 	if (!buffer->new_text) {
 		goto error1;
@@ -54,7 +55,6 @@ bool buffer_initialize(struct buffer *buffer, uint32_t new_text_capacity, uint32
 	if (!list_push_back(&buffer->pieces, &first_piece)) {
 		goto error3;
 	}
-	buffer->first_piece = buffer->pieces;
 	return true;
 
 error3:
@@ -74,7 +74,7 @@ void buffer_destroy(struct buffer *buffer) {
 }
 
 void buffer_get_piece_and_offset(struct buffer *buffer, uint32_t position, struct piece **piece, uint32_t *offset) {
-	*piece = buffer->first_piece;
+	*piece = buffer->pieces + buffer->first_piece_index;
 	uint32_t current_piece_offset = 0;
 	while (true) {
 		struct span text = (*piece)->text;
@@ -96,20 +96,10 @@ void buffer_set_character(struct buffer *buffer, uint32_t position, char8 charac
 }
 
 struct piece *buffer_insert_piece_before(struct buffer *buffer, uint32_t destination_index, struct piece *source) {
-	struct piece *new_piece = buffer->last_free_piece;
-	// Try to find a free piece first.
-	if (new_piece) {
-		if (buffer->last_free_piece->previous_piece_index == PIECE_NONE) {
-			buffer->last_free_piece = NULL;
-		} else {
-			buffer->last_free_piece = buffer->pieces + buffer->last_free_piece->previous_piece_index;
-		}
-	// Allocate a new piece if none are free.
-	} else {
-		new_piece = list_push_back_uninitialized(&buffer->pieces);
-		if (!new_piece) {
-			return NULL;
-		}
+	// Allocate a new piece.
+	struct piece *new_piece = list_push_back_uninitialized(&buffer->pieces);
+	if (!new_piece) {
+		return NULL;
 	}
 
 	// Copy the source if needed.
@@ -126,7 +116,7 @@ struct piece *buffer_insert_piece_before(struct buffer *buffer, uint32_t destina
 
 	// Update the pointer to the first piece if we are inserting before it.
 	if (destination->previous_piece_index == PIECE_NONE) {
-		buffer->first_piece = new_piece;
+		buffer->first_piece_index = new_piece - buffer->pieces;
 	// Else, fix the previous piece's link.
 	} else {
 		struct piece *previous = buffer->pieces + destination->previous_piece_index;
@@ -165,7 +155,7 @@ void buffer_delete_piece(struct buffer *buffer, uint32_t piece_index) {
 	struct piece *piece = buffer->pieces + piece_index;
 	// Fix the previous piece's link.
 	if (piece->previous_piece_index == PIECE_NONE) {
-		buffer->first_piece = buffer->pieces + piece->next_piece_index;
+		buffer->first_piece_index = piece->next_piece_index;
 	} else {
 		struct piece *previous_piece = buffer->pieces + piece->previous_piece_index;
 		previous_piece->next_piece_index = piece->next_piece_index;
@@ -178,13 +168,13 @@ void buffer_delete_piece(struct buffer *buffer, uint32_t piece_index) {
 	}
 
 	// Add the piece to the stack of free pieces.
-	if (buffer->last_free_piece == NULL) {
+	if (buffer->last_free_piece_index == PIECE_NONE) {
 		piece->previous_piece_index = PIECE_NONE;
-		buffer->last_free_piece = piece;
+		buffer->last_free_piece_index = piece - buffer->pieces;
 		return;
 	}
-	piece->previous_piece_index = buffer->last_free_piece - buffer->pieces;
-	buffer->last_free_piece = piece;
+	piece->previous_piece_index = buffer->last_free_piece_index;
+	buffer->last_free_piece_index = piece - buffer->pieces;
 }
 
 bool buffer_insert_character(struct buffer *buffer, uint32_t position, char8 character) {
@@ -236,7 +226,7 @@ void buffer_print_piece(struct buffer *buffer, struct piece *piece) {
 }
 
 void buffer_print_pieces(struct buffer *buffer) {
-	struct piece *current_piece = buffer->first_piece;
+	struct piece *current_piece = buffer->pieces + buffer->first_piece_index;
 	while (true) {
 		buffer_print_piece(buffer, current_piece);
 		if (current_piece->next_piece_index == PIECE_NONE) {
@@ -247,10 +237,10 @@ void buffer_print_pieces(struct buffer *buffer) {
 }
 
 void buffer_print_free_pieces(struct buffer *buffer) {
-	struct piece *current_piece = buffer->last_free_piece;
-	if (!current_piece) {
+	if (buffer->last_free_piece_index == PIECE_NONE) {
 		return;
 	}
+	struct piece *current_piece = buffer->pieces + buffer->last_free_piece_index;
 
 	while (true) {
 		buffer_print_piece(buffer, current_piece);

@@ -30,8 +30,8 @@ struct buffer {
 	char8 *original_text; // Points to an `mmap()`ed chunk of memory if a file has been read into the buffer.
 	char8 *new_text; // Points to a list.
 	struct piece *pieces; // Points to a list.
-	struct piece *last_free_piece; // A stack of pieces that have been deleted. Not a list. Don't free.
-	struct piece *first_piece; // A linked list of pieces that are currently in use. Not a list. Don't free.
+	uint32_t first_piece_index; // A linked list of pieces that are currently in use.
+	uint32_t last_free_piece_index; // A stack of pieces that have been deleted.
 };
 
 // A view used to edit a buffer. Multiple views can edit the same buffer.
