@@ -55,9 +55,34 @@ static void test_buffer_insert_piece_before(void) {
 	buffer_destroy(&buffer);
 }
 
+static void test_buffer_split_piece(void) {
+	struct buffer buffer = {0};
+	buffer_initialize(&buffer, 1, 1);
+	buffer.pieces->selection = (struct selection){
+		.index = 1,
+		.length = 5,
+	};
+	struct piece *left = NULL;
+	struct piece *right = NULL;
+	assert(buffer_split_piece(&buffer, 0, 3, &left, &right));
+	assert(left);
+	assert(right);
+	assert_eq(left->next_piece_index, 0, "%u", "%u");
+	assert_eq(left->previous_piece_index, PIECE_NONE, "%u", "%u");
+	assert_eq(right->previous_piece_index, 1, "%u", "%u");
+	assert_eq(right->next_piece_index, PIECE_NONE, "%u", "%u");
+	assert_eq(left->selection.index, 1, "%u", "%u");
+	assert_eq(left->selection.length, 3, "%u", "%u");
+	assert_eq(right->selection.index, 4, "%u", "%u");
+	assert_eq(right->selection.length, 2, "%u", "%u");
+
+	buffer_destroy(&buffer);
+}
+
 int main(void) {
 	begin_testing();
 		run_test(test_buffer_initialize_and_destroy);
 		run_test(test_buffer_insert_piece_before);
+		run_test(test_buffer_split_piece);
 	return end_testing();
 }
