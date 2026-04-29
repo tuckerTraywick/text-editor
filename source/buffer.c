@@ -1,6 +1,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stddef.h>
+#include <string.h>
 #include "buffer.h"
 #include "list.h"
 
@@ -15,7 +16,7 @@ bool buffer_initialize(struct buffer *buffer, uint32_t lines_capacity, uint32_t 
 	if (!buffer->lines) {
 		goto error2;
 	}
-	if (!line_initialize(buffer->lines, line_character_capaity)) {
+	if (!list_push_back_uninitialized(&buffer->lines) || !line_initialize(buffer->lines, line_character_capaity)) {
 		goto error3;
 	}
 	buffer->first_line_index = 0;
@@ -33,7 +34,7 @@ error1:
 }
 
 void buffer_destroy(struct buffer *buffer) {
-	for (size_t i = 0; i < list_get_count(&buffer); ++i) {
+	for (size_t i = 0; i < list_get_count(&buffer->lines); ++i) {
 		line_destroy(buffer->lines + i);
 	}
 	list_destroy(&buffer->lines);
@@ -55,4 +56,24 @@ bool line_initialize(struct line *line, uint32_t capacity) {
 void line_destroy(struct line *line) {
 	list_destroy(&line->text);
 	*line = (struct line){0};
+}
+
+char8 line_get_character(struct line *line, uint32_t index) {
+	if (index < list_get_count(&line->text)) {
+		return line->text[index];
+	}
+	return '\0';
+}
+
+bool line_set_character(struct line *line, uint32_t index, char8 character) {
+	if (index < list_get_count(&line->text)) {
+		line->text[index] = character;
+		return true;
+	}
+	return false;
+}
+
+bool line_insert_character(struct line *line, uint32_t index, char8 character) {
+	// Written like this so the second condition gets executed if `index` is in bounds.
+	return !(index > list_get_count(&line->text)) || !list_insert(&line->text, (size_t)index, &character);
 }
