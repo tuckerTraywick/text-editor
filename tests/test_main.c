@@ -15,6 +15,55 @@ void test_buffer_destroy(void) {
 	buffer_destroy(&buffer);
 }
 
+void test_line_create_and_destroy(void) {
+	struct line line = {0};
+	assert(line_initialize(&line, 1));
+	assert_eq(line.previous_index, BUFFER_NONE, "%d", "%d");
+	assert_eq(line.next_index, BUFFER_NONE, "%d", "%d");
+	assert_eq(list_get_capacity(&line.text), (size_t)1, "%zu", "%zu");
+	assert_eq(list_get_count(&line.text), (size_t)0, "%zu", "%zu");
+	line_destroy(&line);
+}
+
+void test_line_get_and_set_character(void) {
+	struct line line = {0};
+	assert(line_initialize(&line, 5));
+	list_set_count(&line.text, 2);
+	
+	assert(line_set_character(&line, 0, 'a'));
+	assert_eq(line_get_character(&line, 0), 'a', "%c", "%c");
+
+	assert(line_set_character(&line, 1, 'b'));
+	assert_eq(line_get_character(&line, 1), 'b', "%c", "%c");
+
+	assert(!line_set_character(&line, 2, 'c'));
+	assert_eq(line_get_character(&line, 2), '\0', "%c", "%c");
+
+	line_destroy(&line);
+}
+
+void test_line_insert_character(void) {
+	struct line line = {0};
+	assert(line_initialize(&line, 1));
+
+	assert(line_insert_character(&line, 0, 'a'));
+	assert_eq(list_get_count(&line.text), (size_t)1, "%zu", "%zu");
+	assert_eq(line_get_character(&line, 0), 'a', "%u", "%u");
+
+	assert(line_insert_character(&line, 0, 'b'));
+	assert_eq(list_get_count(&line.text), (size_t)2, "%zu", "%zu");
+	assert_eq(line_get_character(&line, 0), 'b', "%c", "%c");
+	assert_eq(line_get_character(&line, 1), 'a', "%c", "%c");
+
+	assert(line_insert_character(&line, 1, 'c'));
+	assert_eq(list_get_count(&line.text), (size_t)3, "%zu", "%zu");
+	assert_eq(line_get_character(&line, 0), 'b', "%c", "%c");
+	assert_eq(line_get_character(&line, 1), 'c', "%c", "%c");
+	assert_eq(line_get_character(&line, 2), 'a', "%c", "%c");
+
+	line_destroy(&line);
+}
+
 void test_list_insert_uninitialized(void) {
 	int *list = list_create(1, sizeof *list);
 	assert(list);
@@ -97,13 +146,41 @@ void test_list_remove_range(void) {
 	list_destroy(&list);
 }
 
+void test_list_remove(void) {
+	int *list = list_create(1, sizeof *list);
+	assert(list);
+
+	int element = 1;
+	assert(list_push_back(&list, &element));
+	element = 2;
+	assert(list_push_back(&list, &element));
+	element = 3;
+	assert(list_push_back(&list, &element));
+	assert_eq(list_get_count(&list), (size_t)3, "%zu", "%zu");
+	
+	list_remove(&list, 0);
+	assert_eq(list_get_count(&list), (size_t)2, "%zu", "%zu");
+	assert_eq(list[0], 2, "%d", "%d");
+
+	list_remove(&list, 1);
+	assert_eq(list_get_count(&list), (size_t)1, "%zu", "%zu");
+	assert_eq(list[0], 2, "%d", "%d");
+
+	list_destroy(&list);
+}
+
 int main(void) {
 	begin_testing();
 		run_test(test_buffer_initialize);
 
+		run_test(test_line_create_and_destroy);
+		run_test(test_line_get_and_set_character);
+		run_test(test_line_insert_character);
+
 		run_test(test_list_insert_uninitialized);
 		run_test(test_list_insert);
 		run_test(test_list_remove_range);
+		run_test(test_list_remove);
 
 		run_test(test_buffer_destroy);
 	return end_testing();
