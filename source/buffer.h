@@ -75,4 +75,7 @@ bool line_insert_character(struct line *line, uint32_t index, char8 character);
 // Returns false if `start_index` or `start_index + count` is out of bounds or a memory error occurred.
 bool line_delete_range(struct line *line, uint32_t start_index, uint32_t count);
 
+// Returns false if `index` is out of bounds or a memory error occurred.
+bool line_delete_character(struct line *line, uint32_t index);
+
 #endif // BUFFER_H

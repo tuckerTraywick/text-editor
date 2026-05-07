@@ -5,7 +5,7 @@
 #include "buffer.h"
 #include "list.h"
 
-static const size_t initial_file_path_capacity = 4*1024;
+static const size_t initial_file_path_capacity = 3*1024;
 
 bool buffer_initialize(struct buffer *buffer, uint32_t lines_capacity, uint32_t line_character_capaity) {
 	buffer->file_path = list_create(initial_file_path_capacity, sizeof *buffer->file_path);
@@ -74,6 +74,16 @@ bool line_set_character(struct line *line, uint32_t index, char8 character) {
 }
 
 bool line_insert_character(struct line *line, uint32_t index, char8 character) {
-	// Written like this so the second condition gets executed if `index` is in bounds.
-	return !(index > list_get_count(&line->text)) || !list_insert(&line->text, (size_t)index, &character);
+	if (index > list_get_count(&line->text)) {
+		return false;
+	}
+	return list_insert(&line->text, (size_t)index, &character);
+}
+
+bool line_delete_range(struct line *line, uint32_t start_index, uint32_t count) {
+	return list_remove_range(&line->text, start_index, count);
+}
+
+bool line_delete_character(struct line *line, uint32_t index) {
+	return list_remove(&line->text, index);
 }
