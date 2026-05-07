@@ -102,6 +102,16 @@ void *list_insert_uninitialized_impl(void **list, size_t index) {
 	return header->buckets + index*header->bucket_size;
 }
 
+void *list_insert_impl(void **list, size_t index, void *value) {
+	void *new_value = list_insert_uninitialized_impl(list, index);
+	if (!new_value) {
+		return NULL;
+	}
+	struct list_header *header = list_get_header(list);
+	memcpy(new_value, value, header->bucket_size);
+	return new_value;
+}
+
 bool list_remove_range_impl(void **list, size_t start_index, size_t count) {
 	struct list_header *header = list_get_header(list);
 	if (start_index > header->buckets_count || start_index + count > header->buckets_count) {
@@ -123,16 +133,6 @@ bool list_remove_range_impl(void **list, size_t start_index, size_t count) {
 
 bool list_remove_impl(void **list, size_t index) {
 	return list_remove_range_impl(list, index, 1);
-}
-
-void *list_insert_impl(void **list, size_t index, void *value) {
-	void *new_value = list_insert_uninitialized(list, index);
-	if (!new_value) {
-		return NULL;
-	}
-	struct list_header *header = list_get_header(list);
-	memcpy(header->buckets + index*header->bucket_size, value, header->bucket_size);
-	return header->buckets + index*header->bucket_size;
 }
 
 void *list_push_back_uninitialized_impl(void **list) {
