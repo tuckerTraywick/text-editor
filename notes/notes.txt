@@ -1,0 +1,8 @@
+buffer
+	struct buffer_view *views
+
+editor_insert_character(struct editor *editor, char8 character)
+	-> buffer_view_insert_character(editor->current_buffer_view, character)
+		-> selection_insert_character(view->selections + i, character)
+			-> buffer_shift_selections(view->buffer, amt_right, amt_down)
+				-> view_shift_selections(view, )
