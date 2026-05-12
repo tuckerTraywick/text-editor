@@ -3,7 +3,6 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include <pthread.h>
 
 typedef uint32_t keycode;
 
