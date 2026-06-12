@@ -113,8 +113,8 @@ void test_list_remove(void) {
 void test_line_create_and_destroy(void) {
 	struct line line = {0};
 	assert(line_initialize(&line, 1));
-	assert_eq(line.previous_index, BUFFER_NONE, "%d", "%d");
-	assert_eq(line.next_index, BUFFER_NONE, "%d", "%d");
+	assert_eq(line.previous_index, BUFFER_NONE, "%zu", "%zu");
+	assert_eq(line.next_index, BUFFER_NONE, "%zu", "%zu");
 	assert_eq(list_get_capacity(&line.text), (size_t)1, "%zu", "%zu");
 	assert_eq(list_get_count(&line.text), (size_t)0, "%zu", "%zu");
 	line_destroy(&line);

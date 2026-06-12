@@ -1,8 +1,6 @@
 #ifndef TEST_H
 #define TEST_H
 
-#include <stddef.h>
-#include <stdint.h>
 #include <stdbool.h>
 
 // Runs a test and updates the numbers.

@@ -1,8 +1,7 @@
 #include <assert.h>
 
-#include <stdbool.h>
-#include <stdint.h>
 #include <stddef.h>
+#include <stdbool.h>
 #include <string.h>
 #include "buffer.h"
 #include "list.h"
@@ -16,7 +15,7 @@ static const size_t initial_selections_capacity = 100;
 static const size_t initial_matches_capacity = 100;
 
 static void selection_adjust_scroll(struct selection *selection, struct buffer_view *view) {
-	if (selection - view->selections != view->current_selection_index) {
+	if ((size_t)(selection - view->selections) != view->current_selection_index) {
 		return;
 	}
 	// Adjust the x scroll.
@@ -67,7 +66,7 @@ static void selection_delete(struct selection *selection, struct buffer_view *vi
 	// TODO: Adjust selections in other views for this buffer.
 }
 
-static bool selection_insert_character(struct selection *selection, struct buffer_view *view, char8 character) {
+static bool selection_insert_character(struct selection *selection, struct buffer_view *view, char character) {
 	selection_delete(selection, view);
 	struct line *line = view->buffer->lines + selection->end.line_index;
 	if (!line_insert_character(line, selection->end.x, character)) {
@@ -78,30 +77,40 @@ static bool selection_insert_character(struct selection *selection, struct buffe
 	return true;
 }
 
-bool line_initialize(struct line *line, uint32_t capacity) {
+bool line_initialize(struct line *line, size_t capacity) {
 	line->text = list_create(capacity, sizeof *line->text);
 	if (!line->text) {
-		*line = (struct line){0};
-		return false;
+		goto error1;
+	}
+	line->highlight = list_create(capacity, sizeof *line->highlight);
+	if (!line->highlight) {
+		goto error2;
 	}
 	line->previous_index = BUFFER_NONE;
 	line->next_index = BUFFER_NONE;
 	return true;
+
+error2:
+	list_destroy(&line->text);
+error1:
+	*line = (struct line){0};
+	return false;
 }
 
 void line_destroy(struct line *line) {
 	list_destroy(&line->text);
+	list_destroy(&line->highlight);
 	*line = (struct line){0};
 }
 
-char8 line_get_character(struct line *line, uint32_t index) {
+char line_get_character(struct line *line, size_t index) {
 	if (index < list_get_count(&line->text)) {
 		return line->text[index];
 	}
 	return '\0';
 }
 
-bool line_set_character(struct line *line, uint32_t index, char8 character) {
+bool line_set_character(struct line *line, size_t index, char character) {
 	if (index < list_get_count(&line->text)) {
 		line->text[index] = character;
 		return true;
@@ -109,22 +118,22 @@ bool line_set_character(struct line *line, uint32_t index, char8 character) {
 	return false;
 }
 
-bool line_insert_character(struct line *line, uint32_t index, char8 character) {
+bool line_insert_character(struct line *line, size_t index, char character) {
 	if (index > list_get_count(&line->text)) {
 		return false;
 	}
 	return list_insert(&line->text, (size_t)index, &character);
 }
 
-bool line_delete_range(struct line *line, uint32_t start_index, uint32_t count) {
+bool line_delete_range(struct line *line, size_t start_index, size_t count) {
 	return list_remove_range(&line->text, start_index, count);
 }
 
-bool line_delete_character(struct line *line, uint32_t index) {
+bool line_delete_character(struct line *line, size_t index) {
 	return list_remove(&line->text, index);
 }
 
-bool buffer_initialize(struct buffer *buffer, uint32_t lines_capacity, uint32_t line_character_capaity) {
+bool buffer_initialize(struct buffer *buffer, size_t lines_capacity, size_t line_character_capaity) {
 	buffer->file_path = list_create(initial_file_path_capacity, sizeof *buffer->file_path);
 	if (!buffer->file_path) {
 		goto error1;
@@ -217,7 +226,7 @@ void buffer_view_stop_selecting(struct buffer_view *view) {
 	view->is_selecting = false;
 }
 
-bool buffer_view_insert_character(struct buffer_view *view, char8 character) {
+bool buffer_view_insert_character(struct buffer_view *view, char character) {
 	for (size_t i = 0; i < list_get_count(&view->selections); ++i) {
 		if (!selection_insert_character(view->selections + i, view, character)) {
 			return false;

@@ -1,10 +1,10 @@
 #ifndef EDITOR_H
 #define EDITOR_H
 
+#include <stddef.h>
 #include <stdbool.h>
-#include <stdint.h>
 
-typedef uint32_t keycode;
+typedef size_t keycode;
 
 struct editor;
 

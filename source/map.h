@@ -2,7 +2,6 @@
 #define MAP_H
 
 #include <stddef.h>
-#include <stdint.h>
 #include <stdbool.h>
 
 #define map_destroy(map) (map_destroy_impl((void**)(map)))

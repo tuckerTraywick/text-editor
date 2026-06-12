@@ -1,5 +1,3 @@
-#include <stdbool.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <ncurses.h>
 #include "buffer.h"
