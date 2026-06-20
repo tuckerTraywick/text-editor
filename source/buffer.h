@@ -46,10 +46,10 @@ struct buffer_view {
 	struct selection *matches; // Points to a list.
 	size_t current_match_index;
 	bool is_selecting; // Whether the user is selecting text.
-	size_t scroll_x;
-	size_t scroll_y;
-	size_t page_width;
-	size_t page_height;
+	size_t scroll_x; // In visual characters, not logical characters.
+	size_t scroll_y; // In visual characters, not logical characters.
+	size_t page_width; // In visual characters, not logical characters.
+	size_t page_height; // In visual characters, not logical characters.
 };
 
 // Returns false if a memory error occurred.
@@ -89,9 +89,9 @@ bool buffer_view_initialize(struct buffer_view *view, struct buffer *buffer);
 // Doesn't destroy the buffer `view` points to internally.
 void buffer_view_destroy(struct buffer_view *view);
 
-// Converts position in text without tabs expanded/lines wrapped to a position with everything
-// expanded and wrapped.
-size_t buffer_view_get_screen_position(struct buffer_view *view, struct mark logical_position);
+// Converts a logical position in the buffer to a position on screen after tabs are expanded and
+// lines are wrapped.
+struct mark buffer_view_get_visual_position(struct buffer_view *view, struct mark logical_position);
 
 struct selection *buffer_view_get_current_selection(struct buffer_view *view);
 
