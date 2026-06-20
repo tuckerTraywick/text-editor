@@ -3,6 +3,8 @@
 
 #include <stddef.h>
 
+#define vec(x, y) ((struct vector){.x=(x), .y=(y)})
+
 typedef size_t keycode;
 
 typedef size_t color;
@@ -41,6 +43,8 @@ void window_draw_line_horizontal(struct window *window, struct vector start, siz
 void window_draw_line_vertical(struct window *window, struct vector start, size_t length);
 
 void window_draw_widgets(struct window *window);
+
+void window_update(struct window *window);
 
 widget_handle window_add_widget_impl(struct window *window, void *widget, size_t widget_size, size_t widget_alignment);
 
