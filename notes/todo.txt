@@ -1,0 +1,12 @@
+- Figure out how to handle tabs when editing and drawing. Calculate visual positition of cursor each
+  time?
+
+- each mark keeps track of its logical position and visual position
+X too complicated, too much state to manage
+
+- each time you draw a selection, calculate the visual position of the selection
+\, each time you adjust scroll, calculate the visual position of the current cursor
+
+- expand all tabs when typing, flag tab characters with a special bit. when moving left and right, 
+X how do you tell where in a tab you are?
+X still requires recalculating visual position for cursors other than the current one
