@@ -19,16 +19,18 @@ struct vector {
 struct window {
 	struct termios stdin_terminal;
 	struct termios stdout_terminal;
-	struct termios original_stdout_terminal; // Used to switch back to the terminal's previous mode when closing a window.
+	struct termios original_stdin_terminal; // Used to switch back to the terminal's previous mode when closing a window.
 };
 
 // struct view;
 
-// You may only have one active window at a time. Returns true if terminal was setup successfully.
+// Returns true if terminal was setup successfully. You may only have one active window at a time.
 bool window_initialize(struct window *window);
 
 // Must be called before you create another window.
 void window_destroy(struct window *window);
+
+// char8 window_get_character(struct window *window);
 
 // A rectangular section of a window. You can have multiple views active at once.
 // struct view *view_create(struct window *window, struct vector position, struct vector size);

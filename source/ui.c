@@ -11,7 +11,11 @@ bool window_initialize(struct window *window) {
 	if (tcgetattr(STDOUT_FILENO, &window->stdout_terminal)) {
 		goto error1;
 	}
-	window->original_stdout_terminal = window->stdout_terminal;
+	window->original_stdin_terminal = window->stdout_terminal;
+
+	// Enter raw mode.
+	cfmakeraw(&window->stdin_terminal);
+	tcsetattr(STDIN_FILENO, TCSANOW | TCSAFLUSH, &window->stdin_terminal);
 	return true;
 
 error1:
@@ -20,5 +24,7 @@ error1:
 }
 
 void window_destroy(struct window *window) {
+	// Restore canonical mode.
+	tcsetattr(STDIN_FILENO, TCSANOW, &window->original_stdin_terminal);
 	*window = (struct window){0};
 }
