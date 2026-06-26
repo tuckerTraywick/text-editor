@@ -13,9 +13,10 @@ bool window_initialize(struct window *window) {
 	}
 	window->original_stdin_terminal = window->stdout_terminal;
 
-	// Enter raw mode.
-	cfmakeraw(&window->stdin_terminal);
-	tcsetattr(STDIN_FILENO, TCSANOW | TCSAFLUSH, &window->stdin_terminal);
+	cfmakeraw(&window->stdin_terminal); // Enter raw mode.
+	window->stdin_terminal.c_cc[VMIN] = 0; // Read stdin one byte at a time.
+	window->stdin_terminal.c_cc[VTIME] = 1; // 100 milisecond key press time out.
+	tcsetattr(STDIN_FILENO, TCSANOW | TCSAFLUSH, &window->stdin_terminal); // Make these changes happen now.
 	return true;
 
 error1:
