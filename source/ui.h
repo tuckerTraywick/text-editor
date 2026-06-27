@@ -32,14 +32,6 @@ struct window {
 	struct termios original_stdin_terminal; // Used to switch back to the terminal's previous mode when closing a window.
 };
 
-// struct keypress ctrl(struct keypress key);
-
-// struct keypress alt(struct keypress key);
-
-// struct keypress fn(struct keypress key);
-
-// struct keypress special(struct keypress key);
-
 // Returns true if terminal was setup successfully. You may only have one active window at a time.
 bool window_initialize(struct window *window);
 

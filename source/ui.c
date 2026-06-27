@@ -5,30 +5,6 @@
 #include <termios.h>
 #include "ui.h"
 
-// struct keypress ctrl(struct keypress key) {
-// 	struct keypress result = key;
-// 	result.is_ctrl = true;
-// 	return result;
-// }
-
-// struct keypress alt(struct keypress key) {
-// 	struct keypress result = key;
-// 	result.is_alt = true;
-// 	return result;
-// }
-
-// struct keypress fn(struct keypress key) {
-// 	struct keypress result = key;
-// 	result.is_fn = true;
-// 	return result;
-// }
-
-// struct keypress special(struct keypress key) {
-// 	struct keypress result = key;
-// 	result.is_special = true;
-// 	return result;
-// }
-
 bool window_initialize(struct window *window) {
 	*window = (struct window){0};
 	if (tcgetattr(STDIN_FILENO, &window->stdin_terminal)) {
