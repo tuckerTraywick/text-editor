@@ -27,9 +27,16 @@ struct keypress {
 };
 
 struct style {
-	uint8_t r;
-	uint8_t g;
-	uint8_t b;
+	union {
+		uint8_t color_index; // For 8/16/256-color mode.
+		// For rgb colors.
+		struct {
+			uint8_t r;
+			uint8_t g;
+			uint8_t b;
+		};
+	};
+	bool is_rgb : 1;
 	bool is_bold : 1;
 	bool is_faint : 1;
 	bool is_italic : 1;
@@ -51,12 +58,14 @@ struct window {
 	// Used to switch back to the terminal's previous mode when closing a window.
 	struct termios original_stdin_terminal;
 	struct termios original_stdout_terminal;
-	uint32_t screen_width;
-	uint32_t screen_height;
-	struct cell *screen; // Points to a list. `screen_width*screen_height` elements.
+	uint32_t width;
+	uint32_t height;
+	struct cell *screen; // Points to a list. `width*height` elements.
 };
 
 void keypress_print(struct keypress keypress);
+
+bool cells_equal(struct cell *a, struct cell *b);
 
 // Returns true if terminal was setup successfully. You may only have one active window at a time.
 bool window_initialize(struct window *window);
@@ -66,6 +75,10 @@ void window_destroy(struct window *window);
 
 // Not blocking. Returns 0 if no key was pressed before the terminal's timeout.
 struct keypress window_read_character(struct window *window);
+
+struct cell *window_get_cell(struct window *window, struct vector position);
+
+void window_set_cell(struct window *window, struct vector position, struct cell *source);
 
 void window_print(struct window *window, struct vector position, char *text, struct style style);
 

@@ -2,6 +2,7 @@
 #include <ctype.h>
 #include <string.h>
 #include <stdio.h>
+#include <string.h>
 #include <unistd.h>
 #include <termios.h>
 #include <sys/ioctl.h>
@@ -17,6 +18,10 @@ static const char *const special_key_names[] = {
 	['C'] = "right",
 	['D'] = "left",
 };
+
+bool cells_equal(struct cell *a, struct cell *b) {
+	return memcmp(a, b, sizeof *a);
+}
 
 void keypress_print(struct keypress key) {
 	if (key.is_ctrl) {
@@ -59,10 +64,10 @@ bool window_initialize(struct window *window) {
 	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &size)) {
 		goto error1;
 	}
-	window->screen_width = size.ws_col;
-	window->screen_height = size.ws_row;
+	window->width = size.ws_col;
+	window->height = size.ws_row;
 
-	window->screen = list_create(window->screen_width*window->screen_height, sizeof *window->screen);
+	window->screen = list_create(window->width*window->height, sizeof *window->screen);
 	if (!window->screen) {
 		goto error1;
 	}
@@ -128,3 +133,18 @@ struct keypress window_read_character(struct window *window) {
 	}
 	return key;
 }
+
+struct cell *window_get_cell(struct window *window, struct vector position) {
+	return window->screen + position.y*window->width + position.x;
+}
+
+void window_set_cell(struct window *window, struct vector position, struct cell *source) {
+	struct cell *destination = window_get_cell(window, position);
+	if (cells_equal(destination, source)) {
+		return;
+	}
+	*destination = *source;
+	destination->has_changed = true;
+}
+
+
