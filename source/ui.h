@@ -5,11 +5,21 @@
 #include <stdbool.h>
 #include <termios.h>
 
+#define ASCII_ESC 27
+
+#define ASCII_DEL 127
+
+#define ASCII_CTRL_START 64
+
 #define vec(x, y) ((struct vector){.x=(x), .y=(y)})
 
-typedef uint8_t char8;
-
-typedef uint64_t char64;
+struct keypress {
+	char base_key;
+	bool is_ctrl : 1;
+	bool is_alt : 1;
+	bool is_fn : 1;
+	bool is_special : 1;
+};
 
 struct vector {
 	uint32_t x;
@@ -22,7 +32,13 @@ struct window {
 	struct termios original_stdin_terminal; // Used to switch back to the terminal's previous mode when closing a window.
 };
 
-// struct view;
+// struct keypress ctrl(struct keypress key);
+
+// struct keypress alt(struct keypress key);
+
+// struct keypress fn(struct keypress key);
+
+// struct keypress special(struct keypress key);
 
 // Returns true if terminal was setup successfully. You may only have one active window at a time.
 bool window_initialize(struct window *window);
@@ -30,25 +46,7 @@ bool window_initialize(struct window *window);
 // Must be called before you create another window.
 void window_destroy(struct window *window);
 
-// char8 window_get_character(struct window *window);
-
-// A rectangular section of a window. You can have multiple views active at once.
-// struct view *view_create(struct window *window, struct vector position, struct vector size);
-
-// void view_destroy(struct view *view);
-
-// void view_draw_text(struct view *view, struct vector position, char *text);
-
-// void view_draw_line_horizontal(struct view *view, struct vector start, size_t length, char fill, );
-
-// void view_draw_line_vertical(struct view *view, struct vector start, size_t length);
-
-// void view_draw_widgets(struct view *view);
-
-// void window_update(struct window *window);
-
-// widget_handle window_add_widget_impl(struct window *window, void *widget, size_t widget_size, size_t widget_alignment);
-
-// widget_handle window_add_button(struct window *window, char *label);
+// Not blocking. Returns 0 if no key was pressed before the terminal's timeout.
+struct keypress window_get_character(struct window *window);
 
 #endif // UI_H
