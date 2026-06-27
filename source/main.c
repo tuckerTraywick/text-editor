@@ -3,8 +3,41 @@
 #include <unistd.h>
 #include "ui.h"
 
+static const char *const special_key_names[] = {
+	['e'] = "esc",
+	['i'] = "ins",
+	['D'] = "del",
+	['l'] = "left",
+	['r'] = "right",
+	['u'] = "up",
+	['d'] = "down",
+};
 
-#define KEY_ESC 27
+static void print_keypress(struct keypress key) {
+	printf("%d ", key.base_key);
+	if (key.is_ctrl) {
+		printf("ctrl + ");
+	}
+	if (key.is_alt) {
+		printf("alt + ");
+	}
+
+	if (key.is_fn) {
+		printf("f%d\r\n", key.base_key);
+	} else if (key.is_special) {
+		printf("%s\r\n", special_key_names[key.base_key]);
+	} else if (key.base_key == ' ') {
+		printf("space\r\n");
+	} else if (key.base_key == '\t') {
+		printf("tab\r\n");
+	} else if (key.base_key == "\n") {
+		printf("ret\r\n");
+	} else if (key.base_key == ASCII_DEL) {
+		printf("bkspc\r\n");
+	} else {
+		printf("%c\r\n", key.base_key);
+	}
+}
 
 int main(void) {
 	struct window window = {0};
@@ -13,23 +46,16 @@ int main(void) {
 		goto error1;
 	}
 
+	printf("ch = %d\r\n", '\b');
 	while (true) {
-		char ch = '\0';
-		if (!read(STDIN_FILENO, &ch, 1)) {
+		struct keypress key = window_get_character(&window);
+		if (!key.base_key) {
 			continue;
-		} else if (ch == 'q') {
+		}
+		print_keypress(key);
+
+		if (key.base_key == 'q') {
 			break;
-		} else if (ch == KEY_ESC) {
-			// Detect alt + key.
-			if (fread(&ch, 1, 1, stdin)) {
-				printf("char = alt + `%c`\r\n", ch);
-			} else {
-				printf("char = esc\r\n");
-			}
-		} else if (iscntrl(ch)) {
-			printf("char = %d\r\n", ch);
-		} else if (ch) {
-			printf("char = %d (`%c`)\r\n", ch, ch);
 		}
 	}
 
