@@ -3,15 +3,15 @@
 #include <unistd.h>
 #include "ui.h"
 
-static const char *const special_key_codes[] = {
-	[ASCII_ESC] = "27",
-	['2'] = "27 91 50 126",
-	['3'] = "27 91 51 126",
-	['A'] = "27 91 65",
-	['B'] = "27 91 66",
-	['C'] = "27 91 67",
-	['D'] = "27 91 68",
-};
+// static const char *const special_key_codes[] = {
+// 	[ASCII_ESC] = "27",
+// 	['2'] = "27 91 50 126",
+// 	['3'] = "27 91 51 126",
+// 	['A'] = "27 91 65",
+// 	['B'] = "27 91 66",
+// 	['C'] = "27 91 67",
+// 	['D'] = "27 91 68",
+// };
 
 static const char *const special_key_names[] = {
 	[ASCII_ESC] = "esc",
@@ -46,17 +46,6 @@ static void print_keypress(struct keypress key) {
 	} else {
 		printf("%c", key.base_key);
 	}
-
-	printf("\r\n");
-	// if (key.is_alt) {
-	// 	printf("%d ", ASCII_ESC);
-	// }
-	
-	// if (key.is_special) {
-	// 	printf("%s\r\n", special_key_codes[key.base_key]);
-	// } else {
-	// 	printf("%d\r\n", key.base_key);
-	// }
 }
 
 int main(void) {
@@ -72,6 +61,7 @@ int main(void) {
 			continue;
 		}
 		print_keypress(key);
+		printf("\r\n");
 
 		if (key.base_key == 'q') {
 			break;
