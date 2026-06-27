@@ -32,30 +32,31 @@ static void print_keypress(struct keypress key) {
 	}
 
 	if (key.is_fn) {
-		printf("f%d  ", key.base_key);
+		printf("f%d", key.base_key);
 	} else if (key.is_special) {
-		printf("%s  ", special_key_names[key.base_key]);
+		printf("%s", special_key_names[key.base_key]);
 	} else if (key.base_key == ' ') {
-		printf("space  ");
+		printf("space");
 	} else if (key.base_key == '\t') {
-		printf("tab  ");
+		printf("tab");
 	} else if (key.base_key == '\n') {
-		printf("ret  ");
+		printf("ret");
 	} else if (key.base_key == ASCII_DEL) {
-		printf("bkspc  ");
+		printf("bkspc");
 	} else {
-		printf("%c  ", key.base_key);
+		printf("%c", key.base_key);
 	}
 
-	if (key.is_alt) {
-		printf("%d ", ASCII_ESC);
-	}
+	printf("\r\n");
+	// if (key.is_alt) {
+	// 	printf("%d ", ASCII_ESC);
+	// }
 	
-	if (key.is_special) {
-		printf("%s\r\n", special_key_codes[key.base_key]);
-	} else {
-		printf("%d\r\n", key.base_key);
-	}
+	// if (key.is_special) {
+	// 	printf("%s\r\n", special_key_codes[key.base_key]);
+	// } else {
+	// 	printf("%d\r\n", key.base_key);
+	// }
 }
 
 int main(void) {
