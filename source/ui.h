@@ -34,8 +34,8 @@ struct style {
 			uint8_t r;
 			uint8_t g;
 			uint8_t b;
-		};
-	};
+		} components;
+	} color;
 	bool is_rgb : 1;
 	bool is_bold : 1;
 	bool is_faint : 1;
@@ -48,7 +48,7 @@ struct style {
 
 struct cell {
 	char character;
-	bool has_changed;
+	bool is_dirty;
 	struct style style;
 };
 
@@ -65,21 +65,24 @@ struct window {
 
 void keypress_print(struct keypress keypress);
 
-bool cells_equal(struct cell *a, struct cell *b);
-
 // Returns true if terminal was setup successfully. You may only have one active window at a time.
 bool window_initialize(struct window *window);
 
 // Must be called before you create another window.
 void window_destroy(struct window *window);
 
-// Not blocking. Returns 0 if no key was pressed before the terminal's timeout.
+// Not blocking. Returns 0 if no key was pressed before the timeout.
 struct keypress window_read_character(struct window *window);
 
 struct cell *window_get_cell(struct window *window, struct vector position);
 
+// Marks the dirty flag on the destination cell if it differs from `source`.
 void window_set_cell(struct window *window, struct vector position, struct cell *source);
 
-void window_print(struct window *window, struct vector position, char *text, struct style style);
+void window_draw_text(struct window *window, struct vector position, char *text, struct style style);
+
+// Sends only the updated cells from `window` to stdout and flushes stdout. Also puts any new events
+// in the event queue.
+void window_update(struct window *window);
 
 #endif // UI_H

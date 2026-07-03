@@ -10,6 +10,13 @@ int main(void) {
 		goto error1;
 	}
 
+	printf("\x1b[H");
+	printf("\x1b[2J");
+	window.screen[0].character = 'a';
+	window.screen[2].character = 'b';
+	window_update(&window);
+	fflush(stdout);
+
 	while (true) {
 		struct keypress key = window_read_character(&window);
 		if (!key.base_key) {
@@ -21,11 +28,17 @@ int main(void) {
 		if (key.base_key == 'q' && !key.is_ctrl && !key.is_alt) {
 			break;
 		}
+
+		if (key.base_key == 'c') {
+			printf("\x1b[H");
+			printf("\x1b[2J");
+			fflush(stdout);
+		}
 	}
 
 	window_destroy(&window);
 	return 0;
 
 error1:
-	return 1;
+	return 1;	
 }
