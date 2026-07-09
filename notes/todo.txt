@@ -1,3 +1,4 @@
+- Make stlyes always pass by value or by pointer
 - Figure out how to handle tabs when editing and drawing. Calculate visual positition of cursor each
   time?
 
