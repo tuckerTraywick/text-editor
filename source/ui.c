@@ -81,8 +81,8 @@ static void window_mark_dirty(struct window *window) {
 static void window_flush(struct window *window) {
 	struct vector current_position = {0};
 	struct style current_style = {0};
-	for (uint32_t y = 0; y < window->height; ++y) {
-		for (uint32_t x = 0; x < window->width; ++x) {
+	for (uint32_t y = 0; y < window->size.y; ++y) {
+		for (uint32_t x = 0; x < window->size.x; ++x) {
 			struct cell *cell = window_get_cell(window, vec(x, y));
 			if (!cell->is_dirty) {
 				current_position = vec(x, y);
@@ -147,14 +147,13 @@ bool window_initialize(struct window *window) {
 	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &size)) {
 		goto error1;
 	}
-	window->width = size.ws_col;
-	window->height = size.ws_row;
+	window->size = vec(size.ws_col, size.ws_row);
 
-	window->screen = list_create(window->width*window->height, sizeof *window->screen);
+	window->screen = list_create(window->size.x*window->size.y, sizeof *window->screen);
 	if (!window->screen) {
 		goto error1;
 	}
-	if (!list_set_count(&window->screen, window->width*window->height)) {
+	if (!list_set_count(&window->screen, window->size.x*window->size.y)) {
 		goto error2;
 	}
 	window_mark_dirty(window);
@@ -224,7 +223,7 @@ struct keypress window_read_character(struct window *window) {
 }
 
 struct cell *window_get_cell(struct window *window, struct vector position) {
-	return window->screen + position.y*window->width + position.x;
+	return window->screen + position.y*window->size.x + position.x;
 }
 
 void window_set_cell(struct window *window, struct vector position, struct cell *source) {
