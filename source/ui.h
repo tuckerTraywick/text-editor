@@ -11,7 +11,7 @@
 
 #define ASCII_CTRL_START 64
 
-#define vec(x, y) ((struct vector){.x=(x), .y=(y)})
+#define vec(x_value, y_value) ((struct vector){.x=(x_value), .y=(y_value)})
 
 struct vector {
 	uint32_t x;
@@ -58,8 +58,7 @@ struct window {
 	// Used to switch back to the terminal's previous mode when closing a window.
 	struct termios original_stdin_terminal;
 	struct termios original_stdout_terminal;
-	uint32_t width;
-	uint32_t height;
+	struct vector size;
 	struct cell *screen; // Points to a list. `width*height` elements.
 };
 
