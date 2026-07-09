@@ -24,11 +24,11 @@ static bool vectors_equal(struct vector a, struct vector b) {
 }
 
 static bool styles_equal(struct style *a, struct style *b) {
-	return memcmp(a, b, sizeof *a);
+	return memcmp(a, b, sizeof *a) == 0;
 }
 
 static bool cells_equal(struct cell *a, struct cell *b) {
-	return memcmp(a, b, sizeof *a);
+	return memcmp(a, b, sizeof *a) == 0;
 }
 
 // Prints the minimum number of control characters to change the terminal's style from `current` to
@@ -233,6 +233,18 @@ void window_set_cell(struct window *window, struct vector position, struct cell 
 	}
 	*destination = *source;
 	destination->is_dirty = true;
+}
+
+void window_draw_text(struct window *window, struct vector position, char *text, struct style style) {
+	while (*text && position.x < window->size.x) {
+		struct cell cell = {
+			.character = *text,
+			.style = style,
+		};
+		window_set_cell(window, position, &cell);
+		++position.x;
+		++text;
+	}
 }
 
 void window_update(struct window *window) {

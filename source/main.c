@@ -12,10 +12,10 @@ int main(void) {
 
 	printf("\x1b[H");
 	printf("\x1b[2J");
-	window.screen[0].character = 'a';
-	window.screen[2].character = 'b';
+	struct style style = {0};
+	window_draw_text(&window, vec(0, 0), "hello", style);
 	window_update(&window);
-	fflush(stdout);
+	// fflush(stdout);
 
 	while (true) {
 		struct keypress key = window_read_character(&window);
