@@ -1,6 +1,6 @@
 args :=
-libraries := $(shell pkg-config --libs ncurses)
-cflags := -std=gnu99 -Wall -Wpedantic -Wextra -g3 $(shell pkg-config --cflags ncurses)
+libraries := 
+cflags := -std=gnu99 -Wall -Wpedantic -Wextra -g3
 cc := gcc
 main_file = main.c
 
