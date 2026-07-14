@@ -100,7 +100,7 @@ static void window_flush(struct window *window) {
 			if (y != current_position.y || x != current_position.x + 1) {
 				print_position_changes(current_position, vec(x, y));
 			}
-			printf("%c", cell->character);
+			printf("%c", cell->character || ' ');
 			current_position = vec(x, y);
 		}
 	}
